@@ -10,7 +10,7 @@ services:
     ports:
       - "80:80" # ポート番号は元の設定に合わせてください
     volumes:
-      - ../:/var/www/html
+      - ../:/var/www/html/my_fuel_project
     networks:
       - fuelphp-network
 

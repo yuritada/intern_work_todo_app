@@ -10,7 +10,7 @@ COMPOSE_FILE := docker/docker-compose.yml
 # ==========================================
 # コマンド定義
 # ==========================================
-.PHONY: up down clean help
+.PHONY: up down clean help logs
 
 # デフォルトターゲット
 help:
@@ -18,7 +18,7 @@ help:
 	@echo "  make up      - アプリケーションを立ち上げます (ビルド含む)"
 	@echo "  make down    - コンテナを停止・削除します"
 	@echo "  make clean   - コンテナ、ネットワーク、および作成したイメージ($(IMAGE_NAME))を削除します"
-
+	@echo "  make logs    - コンテナのログを表示します"
 # 立ち上げ (ビルドしてから起動)
 up:
 	@echo "Starting up $(CONTAINER_NAME) with image $(IMAGE_NAME)..."
@@ -36,3 +36,8 @@ clean:
 	# -v: ボリュームも削除（DBデータなども消したい場合）
 	docker-compose -f $(COMPOSE_FILE) down --rmi local -v --remove-orphans
 	@echo "Done."
+
+# ログ表示
+logs:
+	@echo "Showing logs for $(CONTAINER_NAME)..."
+	docker-compose -f $(COMPOSE_FILE) logs -f
