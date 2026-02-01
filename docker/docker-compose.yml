@@ -23,6 +23,9 @@ services:
       MYSQL_DATABASE: fuelphp
     ports:
       - "3306:3306"
+    volumes:
+      - ./db/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - fuelphp-network
 
