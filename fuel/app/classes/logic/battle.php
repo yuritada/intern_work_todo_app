@@ -140,7 +140,8 @@ class Battle
 
                 // 経験値を計算（設定ファイルから取得）
                 \Config::load('quest', true);
-                $boss_ranks = \Config::get('quest.boss_ranks');
+                // 【Null安全化】boss_ranks が存在しない場合に備え、空配列をデフォルトに
+                $boss_ranks = \Config::get('quest.boss_ranks') ?? array();
                 $rank = (int)$child_task['boss_rank'];
                 $xp_reward = isset($boss_ranks[$rank]['xp_reward']) ? $boss_ranks[$rank]['xp_reward'] : 10;
 

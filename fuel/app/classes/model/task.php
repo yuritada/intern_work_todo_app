@@ -12,6 +12,30 @@
 class Model_Task
 {
     /**
+     * 配列内のnull値を空文字列に変換（FuelPHP auto_filter との互換性のため）
+     *
+     * 【解説: PHP 7.3 互換性問題】
+     * FuelPHP の Security::htmlentities() は null を受け取ると
+     * get_class(null) でエラーが発生します。
+     * この関数でnull値を空文字列に変換することで問題を回避します。
+     *
+     * @param mixed $data 変換対象のデータ
+     * @return mixed null が空文字列に変換されたデータ
+     */
+    protected static function sanitize_null($data)
+    {
+        if (is_array($data))
+        {
+            foreach ($data as $key => $value)
+            {
+                $data[$key] = static::sanitize_null($value);
+            }
+            return $data;
+        }
+        return $data === null ? '' : $data;
+    }
+
+    /**
      * 親タスク（ボス）をIDで取得
      *
      * @param int $id 親タスクID
@@ -37,7 +61,8 @@ class Model_Task
             $query->where('projects.user_id', '=', $user_id);
         }
 
-        return $query->execute()->current();
+        $result = $query->execute()->current();
+        return $result ? static::sanitize_null($result) : null;
     }
 
     /**
@@ -48,13 +73,15 @@ class Model_Task
      */
     public static function find_parents_by_project($project_id)
     {
-        return \DB::select()
+        $results = \DB::select()
             ->from('parent_tasks')
             ->where('project_id', '=', $project_id)
             ->where('deleted_at', 'IS', \DB::expr('NULL'))
             ->order_by('created_at', 'asc')
             ->execute()
             ->as_array();
+
+        return static::sanitize_null($results);
     }
 
     /**
@@ -88,6 +115,8 @@ class Model_Task
             'boss_hp'    => $boss_hp,
             'current_hp' => $boss_hp,
             'done'       => 0,
+            // DATE型カラムにはNULLを使用（空文字列はMySQLエラーになる）
+            // View表示時は sanitize_null() で空文字列に変換される
             'deadline'   => isset($data['deadline']) && $data['deadline'] ? $data['deadline'] : null,
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
@@ -224,13 +253,15 @@ class Model_Task
      */
     public static function find_children_by_parent($parent_id)
     {
-        return \DB::select()
+        $results = \DB::select()
             ->from('child_tasks')
             ->where('parent_id', '=', $parent_id)
             ->where('deleted_at', 'IS', \DB::expr('NULL'))
             ->order_by('created_at', 'asc')
             ->execute()
             ->as_array();
+
+        return static::sanitize_null($results);
     }
 
     /**
@@ -261,7 +292,8 @@ class Model_Task
             $query->where('projects.user_id', '=', $user_id);
         }
 
-        return $query->execute()->current();
+        $result = $query->execute()->current();
+        return $result ? static::sanitize_null($result) : null;
     }
 
     /**
@@ -377,7 +409,7 @@ class Model_Task
      */
     public static function find_active_bosses($user_id, $limit = 5)
     {
-        return \DB::select(
+        $results = \DB::select(
                 'parent_tasks.*',
                 array('projects.title', 'project_title'),
                 array('projects.id', 'project_id')
@@ -395,6 +427,8 @@ class Model_Task
             ->limit($limit)
             ->execute()
             ->as_array();
+
+        return static::sanitize_null($results);
     }
 
     /**
@@ -438,7 +472,8 @@ class Model_Task
             }
         }
         $parent['completed_tasks'] = $completed;
-        $parent['total_tasks'] = count($children);
+        // 【Null安全化】$childrenがnullの場合に備えたフォールバック
+        $parent['total_tasks'] = is_array($children) ? count($children) : 0;
 
         return $parent;
     }

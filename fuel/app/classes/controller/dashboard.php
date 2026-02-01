@@ -29,10 +29,12 @@ class Controller_Dashboard extends Controller_Base
         $active_bosses = \Model_Task::find_active_bosses($this->current_user['id'], 5);
 
         // ボスランク情報を付加
-        $boss_ranks = $this->quest_config['boss_ranks'];
+        // 【Null安全化】boss_ranks キーが存在しない場合に備え、空配列をデフォルトに
+        $boss_ranks = $this->quest_config['boss_ranks'] ?? array();
         foreach ($active_bosses as &$boss)
         {
-            $rank = isset($boss_ranks[$boss['boss_rank']]) ? $boss_ranks[$boss['boss_rank']] : $boss_ranks[1];
+            // 【Null安全化】ランク情報が存在しない場合のフォールバック
+            $rank = isset($boss_ranks[$boss['boss_rank']]) ? $boss_ranks[$boss['boss_rank']] : (isset($boss_ranks[1]) ? $boss_ranks[1] : array('label' => '不明'));
             $boss['rank_label'] = $rank['label'];
             $boss['hp_percent'] = $boss['boss_hp'] > 0
                 ? round(($boss['current_hp'] / $boss['boss_hp']) * 100)
@@ -55,7 +57,7 @@ class Controller_Dashboard extends Controller_Base
      *
      * @param int $id プロジェクトID
      */
-    public function action_project($id = null)
+    public function action_project($id = '')
     {
         if ( ! $id)
         {
@@ -75,10 +77,12 @@ class Controller_Dashboard extends Controller_Base
         $bosses = \Model_Task::find_parents_by_project($id);
 
         // ボスランク情報を付加
-        $boss_ranks = $this->quest_config['boss_ranks'];
+        // 【Null安全化】boss_ranks キーが存在しない場合に備え、空配列をデフォルトに
+        $boss_ranks = $this->quest_config['boss_ranks'] ?? array();
         foreach ($bosses as &$boss)
         {
-            $rank = isset($boss_ranks[$boss['boss_rank']]) ? $boss_ranks[$boss['boss_rank']] : $boss_ranks[1];
+            // 【Null安全化】ランク情報が存在しない場合のフォールバック
+            $rank = isset($boss_ranks[$boss['boss_rank']]) ? $boss_ranks[$boss['boss_rank']] : (isset($boss_ranks[1]) ? $boss_ranks[1] : array('label' => '不明'));
             $boss['rank_label'] = $rank['label'];
             $boss['hp_percent'] = $boss['boss_hp'] > 0
                 ? round(($boss['current_hp'] / $boss['boss_hp']) * 100)
@@ -140,8 +144,8 @@ class Controller_Dashboard extends Controller_Base
                     $project_id = \Model_Project::create(array(
                         'user_id'  => $this->current_user['id'],
                         'title'    => $input['title'],
-                        'deadline' => $input['deadline'] ?: null,
-                        'memo'     => $input['memo'] ?: null,
+                        'deadline' => $input['deadline'] ?: '',
+                        'memo'     => $input['memo'] ?: '',
                     ));
 
                     if ($project_id)
@@ -166,7 +170,7 @@ class Controller_Dashboard extends Controller_Base
      *
      * @param int $id プロジェクトID
      */
-    public function action_edit($id = null)
+    public function action_edit($id = '')
     {
         if ( ! $id)
         {
@@ -214,8 +218,8 @@ class Controller_Dashboard extends Controller_Base
                 {
                     $updated = \Model_Project::update($id, array(
                         'title'    => $input['title'],
-                        'deadline' => $input['deadline'] ?: null,
-                        'memo'     => $input['memo'] ?: null,
+                        'deadline' => $input['deadline'] ?: '',
+                        'memo'     => $input['memo'] ?: '',
                     ), $this->current_user['id']);
 
                     if ($updated)
@@ -240,7 +244,7 @@ class Controller_Dashboard extends Controller_Base
      *
      * @param int $id プロジェクトID
      */
-    public function action_delete($id = null)
+    public function action_delete($id = '')
     {
         if ( ! $id || \Input::method() !== 'POST')
         {

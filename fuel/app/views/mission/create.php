@@ -5,7 +5,7 @@
         <div class="card card-quest">
             <div class="card-header">
                 <h4 class="mb-0">新しいボスを追加</h4>
-                <small class="text-muted">プロジェクト: <?php echo \Security::htmlentities($project['title']); ?></small>
+                <small class="text-secondary">プロジェクト: <?php echo \Security::htmlentities($project['title']); ?></small>
             </div>
             <div class="card-body">
                 <?php if ( ! empty($errors)): ?>
@@ -46,7 +46,7 @@
                             </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text text-muted">ランクが高いほどボスのHPが増加し、討伐時の報酬XPも増えます</div>
+                        <div class="form-text" style="color: #9ca3af;">ランクが高いほどボスのHPが増加し、討伐時の報酬XPも増えます</div>
                     </div>
 
                     <div class="mb-4">

@@ -12,7 +12,7 @@ class Controller_Mission extends Controller_Base
      *
      * @param int $id 親タスク（ボス）のID
      */
-    public function action_detail($id = null)
+    public function action_detail($id = '')
     {
         if ( ! $id)
         {
@@ -30,8 +30,10 @@ class Controller_Mission extends Controller_Base
         }
 
         // ボスランク情報を取得
-        $boss_ranks = $this->quest_config['boss_ranks'];
-        $rank_info = isset($boss_ranks[$boss['boss_rank']]) ? $boss_ranks[$boss['boss_rank']] : $boss_ranks[1];
+        // 【Null安全化】boss_ranks キーが存在しない場合に備え、空配列をデフォルトに
+        $boss_ranks = $this->quest_config['boss_ranks'] ?? array();
+        // 【Null安全化】ランク情報が存在しない場合のフォールバック
+        $rank_info = isset($boss_ranks[$boss['boss_rank']]) ? $boss_ranks[$boss['boss_rank']] : (isset($boss_ranks[1]) ? $boss_ranks[1] : array('label' => '不明', 'hp_multiplier' => 1));
 
         $data = array(
             'boss'      => $boss,
@@ -47,7 +49,7 @@ class Controller_Mission extends Controller_Base
      *
      * @param int $project_id プロジェクトID
      */
-    public function action_create($project_id = null)
+    public function action_create($project_id = '')
     {
         if ( ! $project_id)
         {
@@ -63,9 +65,10 @@ class Controller_Mission extends Controller_Base
             \Response::redirect('dashboard');
         }
 
+        // 【Null安全化】boss_ranks キーが存在しない場合に備え、空配列をデフォルトに
         $data = array(
             'project'    => $project,
-            'boss_ranks' => $this->quest_config['boss_ranks'],
+            'boss_ranks' => $this->quest_config['boss_ranks'] ?? array(),
             'errors'     => array(),
             'input'      => array(
                 'title'     => '',
@@ -101,7 +104,7 @@ class Controller_Mission extends Controller_Base
                         'project_id' => $project_id,
                         'title'      => $input['title'],
                         'boss_rank'  => $input['boss_rank'],
-                        'deadline'   => $input['deadline'] ?: null,
+                        'deadline'   => $input['deadline'] ?: '',
                     ));
 
                     if ($boss_id)
@@ -126,7 +129,7 @@ class Controller_Mission extends Controller_Base
      *
      * @param int $id 親タスクID
      */
-    public function action_edit($id = null)
+    public function action_edit($id = '')
     {
         if ( ! $id)
         {
@@ -140,9 +143,10 @@ class Controller_Mission extends Controller_Base
             \Response::redirect('dashboard');
         }
 
+        // 【Null安全化】boss_ranks キーが存在しない場合に備え、空配列をデフォルトに
         $data = array(
             'boss'       => $boss,
-            'boss_ranks' => $this->quest_config['boss_ranks'],
+            'boss_ranks' => $this->quest_config['boss_ranks'] ?? array(),
             'errors'     => array(),
             'input'      => array(
                 'title'     => $boss['title'],
@@ -176,7 +180,7 @@ class Controller_Mission extends Controller_Base
                     $updated = \Model_Task::update_parent($id, array(
                         'title'     => $input['title'],
                         'boss_rank' => $input['boss_rank'],
-                        'deadline'  => $input['deadline'] ?: null,
+                        'deadline'  => $input['deadline'] ?: '',
                     ), $this->current_user['id']);
 
                     if ($updated)
@@ -201,7 +205,7 @@ class Controller_Mission extends Controller_Base
      *
      * @param int $id 親タスクID
      */
-    public function action_delete($id = null)
+    public function action_delete($id = '')
     {
         if ( ! $id || \Input::method() !== 'POST')
         {
@@ -240,7 +244,7 @@ class Controller_Mission extends Controller_Base
      *
      * @param int $parent_id 親タスクID
      */
-    public function action_add_task($parent_id = null)
+    public function action_add_task($parent_id = '')
     {
         if ( ! $parent_id || \Input::method() !== 'POST')
         {
@@ -293,7 +297,7 @@ class Controller_Mission extends Controller_Base
      *
      * @param int $id 子タスクID
      */
-    public function action_delete_task($id = null)
+    public function action_delete_task($id = '')
     {
         if ( ! $id || \Input::method() !== 'POST')
         {

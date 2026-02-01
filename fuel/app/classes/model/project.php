@@ -10,6 +10,30 @@ class Model_Project
     const TABLE_NAME = 'projects';
 
     /**
+     * 配列内のnull値を空文字列に変換（FuelPHP auto_filter との互換性のため）
+     *
+     * 【解説: PHP 7.3 互換性問題】
+     * FuelPHP の Security::htmlentities() は null を受け取ると
+     * get_class(null) でエラーが発生します。
+     * この関数でnull値を空文字列に変換することで問題を回避します。
+     *
+     * @param mixed $data 変換対象のデータ
+     * @return mixed null が空文字列に変換されたデータ
+     */
+    protected static function sanitize_null($data)
+    {
+        if (is_array($data))
+        {
+            foreach ($data as $key => $value)
+            {
+                $data[$key] = static::sanitize_null($value);
+            }
+            return $data;
+        }
+        return $data === null ? '' : $data;
+    }
+
+    /**
      * ユーザーのプロジェクト一覧を取得
      *
      * @param int $user_id ユーザーID
@@ -29,7 +53,8 @@ class Model_Project
 
         $query->order_by('created_at', 'desc');
 
-        return $query->execute()->as_array();
+        $results = $query->execute()->as_array();
+        return static::sanitize_null($results);
     }
 
     /**
@@ -51,7 +76,8 @@ class Model_Project
             $query->where('user_id', '=', $user_id);
         }
 
-        return $query->execute()->current();
+        $result = $query->execute()->current();
+        return $result ? static::sanitize_null($result) : null;
     }
 
     /**
@@ -70,8 +96,11 @@ class Model_Project
         $insert_data = array(
             'user_id'    => (int)$data['user_id'],
             'title'      => $data['title'],
+            // DATE型カラムにはNULLを使用（空文字列はMySQLエラーになる）
+            // View表示時は sanitize_null() で空文字列に変換される
             'deadline'   => isset($data['deadline']) && $data['deadline'] ? $data['deadline'] : null,
-            'memo'       => isset($data['memo']) ? $data['memo'] : null,
+            // VARCHAR/TEXT型は空文字列でOK
+            'memo'       => isset($data['memo']) && $data['memo'] ? $data['memo'] : '',
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
         );
@@ -236,13 +265,15 @@ class Model_Project
             ->execute()
             ->current();
 
-        $total_tasks = (int)$task_stats['total'];
-        $completed_tasks = (int)$task_stats['completed'];
+        // 【Null安全化】クエリ結果がnullの場合に備えたフォールバック
+        $total_tasks = $task_stats ? (int)$task_stats['total'] : 0;
+        $completed_tasks = $task_stats ? (int)$task_stats['completed'] : 0;
         $progress_percent = $total_tasks > 0 ? round(($completed_tasks / $total_tasks) * 100) : 0;
 
         return array(
-            'total_bosses'    => (int)$boss_stats['total'],
-            'defeated_bosses' => (int)$boss_stats['defeated'],
+            // 【Null安全化】クエリ結果がnullの場合に備えたフォールバック
+            'total_bosses'    => $boss_stats ? (int)$boss_stats['total'] : 0,
+            'defeated_bosses' => $boss_stats ? (int)$boss_stats['defeated'] : 0,
             'total_tasks'     => $total_tasks,
             'completed_tasks' => $completed_tasks,
             'progress_percent' => $progress_percent,

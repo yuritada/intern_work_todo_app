@@ -12,7 +12,7 @@
             <ol class="breadcrumb bg-transparent">
                 <li class="breadcrumb-item"><a href="<?php echo \Uri::create('dashboard'); ?>" class="text-light">Dashboard</a></li>
                 <li class="breadcrumb-item"><a href="<?php echo \Uri::create('dashboard/project/' . $boss['project_id']); ?>" class="text-light"><?php echo \Security::htmlentities($boss['project_title']); ?></a></li>
-                <li class="breadcrumb-item active text-muted"><?php echo \Security::htmlentities($boss['title']); ?></li>
+                <li class="breadcrumb-item active" style="color: #a5b4fc;"><?php echo \Security::htmlentities($boss['title']); ?></li>
             </ol>
         </nav>
     </div>
@@ -69,13 +69,13 @@
                 <h4 class="text-light" data-bind="text: completedTasks() + ' / ' + totalTasks()">
                     <?php echo $boss['completed_tasks']; ?> / <?php echo $boss['total_tasks']; ?>
                 </h4>
-                <p class="text-muted mb-0">完了タスク</p>
+                <p class="text-secondary mb-0">完了タスク</p>
             </div>
             <div class="col-6">
                 <h4 class="text-success" data-bind="text: hpPercent() + '%'">
                     <?php echo $boss['hp_percent']; ?>%
                 </h4>
-                <p class="text-muted mb-0">残りHP</p>
+                <p class="text-secondary mb-0">残りHP</p>
             </div>
         </div>
     </div>
@@ -169,7 +169,7 @@
                                value="10"
                                min="1"
                                max="100">
-                        <div class="form-text text-muted">タスク完了時にボスに与えるダメージ</div>
+                        <div class="form-text" style="color: #9ca3af;">タスク完了時にボスに与えるダメージ</div>
                     </div>
                 </div>
                 <div class="modal-footer border-secondary">
@@ -231,8 +231,13 @@
     }
 
     .task-title {
-        color: #eaeaea;
+        color: #f3f4f6;
         font-size: 1.1rem;
+    }
+
+    /* 配色修正: text-secondary を暗い背景用に調整 */
+    .text-secondary {
+        color: #9ca3af !important;
     }
 
     #level-up-alert {
@@ -274,8 +279,10 @@ document.addEventListener('DOMContentLoaded', function() {
         self.isDead = ko.observable(<?php echo $boss['done'] ? 'true' : 'false'; ?>);
 
         // タスク配列（observableArray）
+        // 【Null安全化】$boss['children']が存在しない場合に備えたフォールバック
         self.tasks = ko.observableArray([
-            <?php foreach ($boss['children'] as $child): ?>
+            <?php $children = isset($boss['children']) && is_array($boss['children']) ? $boss['children'] : array(); ?>
+            <?php foreach ($children as $child): ?>
             {
                 id: ko.observable(<?php echo (int)$child['id']; ?>),
                 title: ko.observable('<?php echo addslashes($child['title']); ?>'),

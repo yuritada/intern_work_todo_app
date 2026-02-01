@@ -43,7 +43,7 @@
                             </option>
                             <?php endforeach; ?>
                         </select>
-                        <div class="form-text text-muted">ランク変更時、HPは比率を維持して再計算されます</div>
+                        <div class="form-text" style="color: #9ca3af;">ランク変更時、HPは比率を維持して再計算されます</div>
                     </div>
 
                     <div class="mb-4">

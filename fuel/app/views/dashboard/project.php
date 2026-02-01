@@ -86,9 +86,9 @@
                 </thead>
                 <tbody>
                     <?php foreach ($bosses as $boss): ?>
-                    <tr class="<?php echo $boss['done'] ? 'table-secondary' : ''; ?>">
+                    <tr class="<?php echo $boss['done'] ? 'boss-defeated' : ''; ?>">
                         <td>
-                            <a href="<?php echo \Uri::create('mission/detail/' . $boss['id']); ?>" class="text-decoration-none <?php echo $boss['done'] ? 'text-muted' : 'text-danger'; ?>">
+                            <a href="<?php echo \Uri::create('mission/detail/' . $boss['id']); ?>" class="text-decoration-none <?php echo $boss['done'] ? 'text-secondary' : 'text-danger'; ?>">
                                 <?php echo \Security::htmlentities($boss['title']); ?>
                             </a>
                         </td>
@@ -110,11 +110,11 @@
                             <span class="badge bg-danger">遭遇中</span>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td class="text-light">
                             <?php if ($boss['deadline']): ?>
                             <?php echo date('m/d', strtotime($boss['deadline'])); ?>
                             <?php else: ?>
-                            <span class="text-muted">-</span>
+                            <span class="text-secondary">-</span>
                             <?php endif; ?>
                         </td>
                         <td class="text-end">
@@ -154,5 +154,18 @@
 
     .table-dark {
         --bs-table-bg: transparent;
+    }
+
+    .table-dark th {
+        color: #c7d2fe;
+    }
+
+    .boss-defeated {
+        opacity: 0.7;
+    }
+
+    /* 配色修正: text-secondary を暗い背景用に調整 */
+    .text-secondary {
+        color: #9ca3af !important;
     }
 </style>
