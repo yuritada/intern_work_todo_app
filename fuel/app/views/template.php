@@ -65,6 +65,11 @@
             transition: width 0.3s ease;
         }
 
+        .xp-text {
+            color: #a5b4fc;
+            font-size: 0.75rem;
+        }
+
         /* メインコンテンツ */
         .main-content {
             padding: 2rem 0;
@@ -101,6 +106,51 @@
             padding: 1rem 0;
             margin-top: auto;
         }
+
+        /* 配色修正: text-muted を暗い背景用に調整 */
+        .text-muted {
+            color: #9ca3af !important;
+        }
+
+        /* ナビゲーションリンクの色 */
+        .navbar-quest .nav-link {
+            color: #c7d2fe !important;
+        }
+        .navbar-quest .nav-link:hover {
+            color: #ffffff !important;
+        }
+
+        /* カードヘッダーのテキスト色 */
+        .card-quest .card-header h5,
+        .card-quest .card-header h3 {
+            color: #e2e8f0;
+        }
+
+        /* フッターテキストの可読性向上 */
+        .footer-quest .text-muted {
+            color: #a0aec0 !important;
+        }
+
+        /* フォーム要素の色調整 */
+        .form-control::placeholder {
+            color: #6b7280 !important;
+        }
+        .form-label {
+            color: #e2e8f0;
+        }
+        .form-text {
+            color: #9ca3af !important;
+        }
+
+        /* バッジの可読性 */
+        .badge.bg-secondary {
+            background-color: #4b5563 !important;
+            color: #f3f4f6 !important;
+        }
+        .badge.bg-info {
+            background-color: #0ea5e9 !important;
+            color: #ffffff !important;
+        }
     </style>
 
     <?php if (isset($extra_css)) echo $extra_css; ?>
@@ -131,7 +181,7 @@
                         <div class="xp-bar-container">
                             <div class="xp-bar" style="width: <?php echo isset($xp_progress) ? $xp_progress : 0; ?>%;"></div>
                         </div>
-                        <small class="text-muted">
+                        <small class="xp-text">
                             XP: <?php echo \Security::htmlentities($current_user['xp']); ?>
                             <?php if (isset($next_level_xp)): ?>
                             / <?php echo \Security::htmlentities($next_level_xp); ?>

@@ -78,7 +78,8 @@ class Controller_Base extends \Controller_Template
         // 第2引数 true でグループ名 'quest' としてアクセス可能にする
         // 例: \Config::get('quest.boss_ranks')
         \Config::load('quest', true);
-        $this->quest_config = \Config::get('quest');
+        // 【Null安全化】Config::get() が null を返す場合に備え、空配列をデフォルトに
+        $this->quest_config = \Config::get('quest') ?? array();
 
         // 現在のアクション名を取得
         $current_action = \Request::active()->action;
@@ -156,7 +157,8 @@ class Controller_Base extends \Controller_Template
      */
     protected function get_current_level_xp($level)
     {
-        $xp_table = $this->quest_config['xp_table'];
+        // 【Null安全化】xp_table キーが存在しない場合に備え、空配列をデフォルトに
+        $xp_table = $this->quest_config['xp_table'] ?? array();
         return isset($xp_table[$level]) ? $xp_table[$level] : 0;
     }
 
@@ -168,7 +170,8 @@ class Controller_Base extends \Controller_Template
      */
     protected function get_next_level_xp($current_level)
     {
-        $xp_table = $this->quest_config['xp_table'];
+        // 【Null安全化】xp_table キーが存在しない場合に備え、空配列をデフォルトに
+        $xp_table = $this->quest_config['xp_table'] ?? array();
         $next_level = $current_level + 1;
 
         if (isset($xp_table[$next_level]))
