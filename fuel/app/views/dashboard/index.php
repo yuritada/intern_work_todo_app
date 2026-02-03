@@ -122,12 +122,21 @@
                 <?php else: ?>
                 <div class="row">
                     <?php foreach ($projects as $project): ?>
+                    <?php
+                        // プロジェクト完全討伐判定
+                        $is_project_cleared = ($project['progress']['total_bosses'] > 0 && $project['progress']['defeated_bosses'] == $project['progress']['total_bosses']);
+                    ?>
                     <div class="col-md-6 col-lg-4 mb-3">
-                        <div class="project-card p-3">
+                        <div class="project-card p-3 <?php echo $is_project_cleared ? 'project-cleared' : ''; ?>">
                             <div class="d-flex justify-content-between align-items-start mb-2">
-                                <a href="<?php echo \Uri::create('dashboard/project/' . $project['id']); ?>" class="project-title text-decoration-none">
-                                    <?php echo \Security::htmlentities($project['title']); ?>
-                                </a>
+                                <div>
+                                    <a href="<?php echo \Uri::create('dashboard/project/' . $project['id']); ?>" class="project-title text-decoration-none">
+                                        <?php echo \Security::htmlentities($project['title']); ?>
+                                    </a>
+                                    <?php if ($is_project_cleared): ?>
+                                    <span class="badge bg-success ms-2">完全討伐</span>
+                                    <?php endif; ?>
+                                </div>
                                 <?php if ($project['deadline']): ?>
                                 <span class="badge bg-info">
                                     <?php echo date('m/d', strtotime($project['deadline'])); ?>
@@ -238,5 +247,15 @@
 
     .project-title:hover {
         color: #c7d2fe;
+    }
+
+    /* プロジェクト完全討伐スタイル */
+    .project-card.project-cleared {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.1);
+    }
+
+    .project-card.project-cleared .project-title {
+        color: #34d399;
     }
 </style>

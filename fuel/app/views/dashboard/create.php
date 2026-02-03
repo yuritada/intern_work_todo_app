@@ -4,7 +4,7 @@
     <div class="col-md-8 col-lg-6">
         <div class="card card-quest">
             <div class="card-header">
-                <h4 class="mb-0">新しい冒険を開始</h4>
+                <h4 class="mb-0 text-light">新しい冒険を開始</h4>
             </div>
             <div class="card-body">
                 <?php if ( ! empty($errors)): ?>

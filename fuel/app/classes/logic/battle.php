@@ -236,6 +236,136 @@ class Battle
     }
 
     /**
+     * プロジェクト完全制覇判定
+     *
+     * 【Phase 5: プロジェクト完全制覇エフェクト】
+     * プロジェクト内の全てのボス（親タスク）が討伐済みかどうかを確認します。
+     *
+     * @param int $project_id プロジェクトID
+     * @return bool 全ボス討伐済みならtrue
+     */
+    public static function check_project_clear($project_id)
+    {
+        // プロジェクトに紐づく全ての親タスクを取得
+        $bosses = \DB::select('id', 'done')
+            ->from('parent_tasks')
+            ->where('project_id', '=', $project_id)
+            ->where('deleted_at', 'IS', \DB::expr('NULL'))
+            ->execute()
+            ->as_array();
+
+        // ボスが1つもない場合は未達成
+        if (empty($bosses))
+        {
+            return false;
+        }
+
+        // 全てのボスが done = 1 かチェック
+        foreach ($bosses as $boss)
+        {
+            if ($boss['done'] != 1)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * ボスの現在の合計攻撃力（weight）を計算
+     *
+     * 【Phase 5: オーバーキル防止】
+     * 既に登録されている子タスクのweight合計を計算します。
+     * 一斉登録画面で新規タスクを追加する際の参照用。
+     *
+     * @param int $parent_id 親タスク（ボス）ID
+     * @return int 現在の合計weight
+     */
+    public static function get_total_weight($parent_id)
+    {
+        $result = \DB::select(\DB::expr('COALESCE(SUM(weight), 0) as total_weight'))
+            ->from('child_tasks')
+            ->where('parent_id', '=', $parent_id)
+            ->where('deleted_at', 'IS', \DB::expr('NULL'))
+            ->execute()
+            ->current();
+
+        return $result ? (int)$result['total_weight'] : 0;
+    }
+
+    /**
+     * 一括タスク登録
+     *
+     * 【Phase 5: タスク一斉登録】
+     * 複数のタスクを一度にDBへ挿入します。
+     *
+     * @param int $parent_id 親タスク（ボス）ID
+     * @param array $tasks タスクデータの配列 [['title' => '...', 'weight' => ...], ...]
+     * @return array 処理結果 ('success', 'count', 'error')
+     */
+    public static function bulk_insert_tasks($parent_id, array $tasks)
+    {
+        $result = array(
+            'success' => false,
+            'count'   => 0,
+            'error'   => null,
+        );
+
+        if (empty($tasks))
+        {
+            $result['error'] = 'タスクが指定されていません。';
+            return $result;
+        }
+
+        \DB::start_transaction();
+
+        try
+        {
+            $now = date('Y-m-d H:i:s');
+            $count = 0;
+
+            foreach ($tasks as $task)
+            {
+                if (empty($task['title']))
+                {
+                    continue; // 空のタイトルはスキップ
+                }
+
+                \DB::insert('child_tasks')
+                    ->set(array(
+                        'parent_id'  => (int)$parent_id,
+                        'title'      => $task['title'],
+                        'weight'     => isset($task['weight']) ? (int)$task['weight'] : 10,
+                        'done'       => 0,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ))
+                    ->execute();
+
+                $count++;
+            }
+
+            if ($count === 0)
+            {
+                throw new \Exception('有効なタスクがありません。');
+            }
+
+            \DB::commit_transaction();
+            $result['success'] = true;
+            $result['count'] = $count;
+
+        }
+        catch (\Exception $e)
+        {
+            \DB::rollback_transaction();
+            $result['error'] = $e->getMessage();
+        }
+
+        return $result;
+    }
+
+    /**
      * タスクの完了を取り消す（アンドゥ機能）
      *
      * @param int $child_task_id 取り消す子タスクのID

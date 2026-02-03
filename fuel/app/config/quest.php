@@ -93,6 +93,37 @@ return array(
     'default_task_weight' => 10,
 
     /**
+     * 心理的重み（Psychological Weights）
+     *
+     * 【解説: Phase 5 - UX向上機能】
+     * ユーザーが数値を入力する代わりに「簡単/普通/きつい」から選ぶことで、
+     * 適切な攻撃力（weight）が自動的に設定されます。
+     * これにより、ゲームバランスの破綻を防ぎ、ユーザーの心理的負担を軽減します。
+     *
+     * - key: 選択肢の識別子（フォームのvalue値として使用）
+     * - label: UIに表示するラベル
+     * - weight: 実際にDBに保存されるダメージ値
+     * - description: ユーザーへの説明文
+     */
+    'psychological_weights' => array(
+        'easy' => array(
+            'label'       => '簡単',
+            'weight'      => 5,
+            'description' => 'すぐに終わる軽いタスク',
+        ),
+        'normal' => array(
+            'label'       => '普通',
+            'weight'      => 15,
+            'description' => '通常の作業量のタスク',
+        ),
+        'hard' => array(
+            'label'       => 'きつい',
+            'weight'      => 35,
+            'description' => '時間がかかる重いタスク',
+        ),
+    ),
+
+    /**
      * ボスの基本HP
      *
      * 【解説】
