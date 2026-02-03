@@ -1,13 +1,25 @@
 <!-- プロジェクト詳細画面 -->
+<?php
+    // プロジェクト完全討伐判定
+    $is_project_cleared = ($progress['total_bosses'] > 0 && $progress['defeated_bosses'] == $progress['total_bosses']);
+?>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h2 class="text-light mb-1"><?php echo \Security::htmlentities($project['title']); ?></h2>
+        <h2 class="text-light mb-1">
+            <?php echo \Security::htmlentities($project['title']); ?>
+            <?php if ($is_project_cleared): ?>
+            <span class="badge bg-success fs-6 ms-2">完全討伐</span>
+            <?php endif; ?>
+        </h2>
         <?php if ($project['deadline']): ?>
         <span class="badge bg-info">期限: <?php echo date('Y/m/d', strtotime($project['deadline'])); ?></span>
         <?php endif; ?>
     </div>
     <div class="btn-group">
+        <a href="<?php echo \Uri::create('dashboard/bulk_create/' . $project['id']); ?>" class="btn btn-quest btn-sm">
+            一斉登録
+        </a>
         <a href="<?php echo \Uri::create('dashboard/edit/' . $project['id']); ?>" class="btn btn-outline-light btn-sm">
             編集
         </a>
@@ -59,9 +71,14 @@
 <div class="card card-quest">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">ボス一覧</h5>
-        <a href="<?php echo \Uri::create('mission/create/' . $project['id']); ?>" class="btn btn-quest btn-sm">
-            + ボスを追加
-        </a>
+        <div class="btn-group">
+            <a href="<?php echo \Uri::create('dashboard/bulk_create/' . $project['id']); ?>" class="btn btn-outline-light btn-sm">
+                一斉登録
+            </a>
+            <a href="<?php echo \Uri::create('mission/create/' . $project['id']); ?>" class="btn btn-quest btn-sm">
+                + ボスを追加
+            </a>
+        </div>
     </div>
     <div class="card-body">
         <?php if (empty($bosses)): ?>

@@ -240,6 +240,203 @@ class Controller_Dashboard extends Controller_Base
     }
 
     /**
+     * プロジェクト一斉登録（ボス＆攻撃）
+     *
+     * 【Phase 5: UX向上】
+     * プロジェクト画面から複数のボスと、それぞれに属する攻撃を
+     * 一度に登録できる機能です。
+     *
+     * @param int $id プロジェクトID
+     */
+    public function action_bulk_create($id = '')
+    {
+        if ( ! $id)
+        {
+            \Session::set_flash('error', 'プロジェクトが指定されていません。');
+            \Response::redirect('dashboard');
+        }
+
+        $project = \Model_Project::find_by_id($id, $this->current_user['id']);
+        if ( ! $project)
+        {
+            \Session::set_flash('error', 'プロジェクトが見つかりません。');
+            \Response::redirect('dashboard');
+        }
+
+        // 設定を取得
+        $boss_ranks = $this->quest_config['boss_ranks'] ?? array();
+        $psychological_weights = $this->quest_config['psychological_weights'] ?? array(
+            'easy'   => array('label' => '簡単', 'weight' => 5),
+            'normal' => array('label' => '普通', 'weight' => 15),
+            'hard'   => array('label' => 'きつい', 'weight' => 35),
+        );
+
+        $data = array(
+            'project'              => $project,
+            'boss_ranks'           => $boss_ranks,
+            'psychological_weights' => $psychological_weights,
+            'errors'               => array(),
+        );
+
+        // POST処理
+        if (\Input::method() === 'POST')
+        {
+            if ( ! \Security::check_token())
+            {
+                $data['errors'][] = '不正なリクエストです。';
+            }
+            else
+            {
+                $bosses_data = \Input::post('bosses', array());
+                $auto_balance = \Input::post('auto_balance', 0);
+
+                if (empty($bosses_data))
+                {
+                    $data['errors'][] = '少なくとも1つのボスを入力してください。';
+                }
+                else
+                {
+                    \DB::start_transaction();
+
+                    try
+                    {
+                        $created_bosses = 0;
+                        $created_tasks = 0;
+
+                        foreach ($bosses_data as $boss_input)
+                        {
+                            $boss_title = isset($boss_input['title']) ? trim($boss_input['title']) : '';
+                            if (empty($boss_title))
+                            {
+                                continue; // タイトルが空のボスはスキップ
+                            }
+
+                            $boss_rank = isset($boss_input['rank']) ? (int)$boss_input['rank'] : 1;
+
+                            // ボスを作成
+                            $boss_id = \Model_Task::create_parent(array(
+                                'project_id' => $id,
+                                'title'      => $boss_title,
+                                'boss_rank'  => $boss_rank,
+                                'deadline'   => '',
+                            ));
+
+                            if ( ! $boss_id)
+                            {
+                                throw new \Exception('ボス「' . $boss_title . '」の作成に失敗しました。');
+                            }
+
+                            $created_bosses++;
+
+                            // ボスのHPを取得
+                            $boss = \Model_Task::find_parent_by_id($boss_id);
+                            $boss_hp = $boss ? $boss['boss_hp'] : 100;
+
+                            // 攻撃（子タスク）を処理
+                            $attacks = isset($boss_input['attacks']) ? $boss_input['attacks'] : array();
+                            $valid_attacks = array();
+
+                            foreach ($attacks as $attack)
+                            {
+                                $attack_title = isset($attack['title']) ? trim($attack['title']) : '';
+                                if ( ! empty($attack_title))
+                                {
+                                    $weight_key = isset($attack['weight']) ? $attack['weight'] : 'normal';
+                                    $valid_attacks[] = array(
+                                        'title'      => $attack_title,
+                                        'weight_key' => $weight_key,
+                                        'weight'     => isset($psychological_weights[$weight_key]['weight'])
+                                            ? $psychological_weights[$weight_key]['weight']
+                                            : 15,
+                                    );
+                                }
+                            }
+
+                            if ( ! empty($valid_attacks))
+                            {
+                                if ($auto_balance)
+                                {
+                                    // 自動バランスモード：比率で分配
+                                    $total_ratio = 0;
+                                    foreach ($valid_attacks as $a)
+                                    {
+                                        $total_ratio += $a['weight'];
+                                    }
+
+                                    $floor_sum = 0;
+                                    $calculated_weights = array();
+                                    foreach ($valid_attacks as $i => $a)
+                                    {
+                                        $w = ($total_ratio > 0) ? (int)floor($boss_hp * $a['weight'] / $total_ratio) : 1;
+                                        $calculated_weights[$i] = $w;
+                                        $floor_sum += $w;
+                                    }
+
+                                    // 端数を最初のタスクに加算
+                                    $remainder = $boss_hp - $floor_sum;
+                                    if ($remainder > 0 && count($calculated_weights) > 0)
+                                    {
+                                        $calculated_weights[0] += $remainder;
+                                    }
+
+                                    foreach ($valid_attacks as $i => $a)
+                                    {
+                                        \Model_Task::create_child(array(
+                                            'parent_id' => $boss_id,
+                                            'title'     => $a['title'],
+                                            'weight'    => max(1, $calculated_weights[$i]),
+                                        ));
+                                        $created_tasks++;
+                                    }
+                                }
+                                else
+                                {
+                                    // 手動モード：固定weight
+                                    foreach ($valid_attacks as $a)
+                                    {
+                                        \Model_Task::create_child(array(
+                                            'parent_id' => $boss_id,
+                                            'title'     => $a['title'],
+                                            'weight'    => $a['weight'],
+                                        ));
+                                        $created_tasks++;
+                                    }
+                                }
+                            }
+                        }
+
+                        if ($created_bosses === 0)
+                        {
+                            throw new \Exception('有効なボスがありません。');
+                        }
+
+                        \DB::commit_transaction();
+
+                        $message = $created_bosses . '体のボス';
+                        if ($created_tasks > 0)
+                        {
+                            $message .= '、' . $created_tasks . '件の攻撃';
+                        }
+                        $message .= 'を登録しました！';
+
+                        \Session::set_flash('success', $message);
+                        \Response::redirect('dashboard/project/' . $id);
+
+                    }
+                    catch (\Exception $e)
+                    {
+                        \DB::rollback_transaction();
+                        $data['errors'][] = $e->getMessage();
+                    }
+                }
+            }
+        }
+
+        $this->template->title = '一斉登録 - ' . $project['title'];
+        $this->template->content = \View::forge('dashboard/bulk_create', $data);
+    }
+
+    /**
      * プロジェクト削除
      *
      * @param int $id プロジェクトID

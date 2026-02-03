@@ -90,9 +90,14 @@
 <div class="card card-quest">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">攻撃アクション（タスク）</h5>
-        <button class="btn btn-quest btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">
-            + 攻撃を追加
-        </button>
+        <div class="btn-group">
+            <a href="<?php echo \Uri::create('mission/bulk/' . $boss['id']); ?>" class="btn btn-outline-light btn-sm">
+                一斉登録
+            </a>
+            <button class="btn btn-quest btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+                + 攻撃を追加
+            </button>
+        </div>
     </div>
     <div class="card-body" id="task-list-container">
         <!-- タスクがない場合の表示 -->
@@ -353,6 +358,66 @@
     @keyframes fadeIn {
         from { opacity: 0; }
         to { opacity: 1; }
+    }
+
+    /* プロジェクト完全制覇エフェクト */
+    .project-clear-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1200;
+        animation: fadeIn 0.5s ease;
+    }
+
+    .project-clear-overlay h1 {
+        font-size: 3rem;
+        color: #fbbf24;
+        text-shadow: 0 0 30px rgba(251, 191, 36, 0.8);
+        animation: projectClearText 1.5s ease infinite;
+        text-align: center;
+    }
+
+    @keyframes projectClearText {
+        0%, 100% { transform: scale(1); text-shadow: 0 0 30px rgba(251, 191, 36, 0.8); }
+        50% { transform: scale(1.05); text-shadow: 0 0 50px rgba(251, 191, 36, 1); }
+    }
+
+    /* 紙吹雪エフェクト */
+    .confetti-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1201;
+        overflow: hidden;
+    }
+
+    .confetti {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        top: -10px;
+        animation: confettiFall linear forwards;
+    }
+
+    @keyframes confettiFall {
+        0% {
+            transform: translateY(0) rotate(0deg);
+            opacity: 1;
+        }
+        100% {
+            transform: translateY(100vh) rotate(720deg);
+            opacity: 0;
+        }
     }
 </style>
 
@@ -629,7 +694,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         // ボス討伐時
                         if (response.is_dead) {
                             self.isDead(true);
-                            showVictoryOverlay(response.gained_xp);
+                            showVictoryOverlay(response.gained_xp, response.project_cleared);
                             updateUserStatus(); // ナビバーのXP更新
                         }
 
@@ -710,7 +775,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 勝利オーバーレイ表示
-    function showVictoryOverlay(xp) {
+    function showVictoryOverlay(xp, projectCleared) {
         var overlay = document.createElement('div');
         overlay.className = 'victory-overlay';
         overlay.innerHTML = '<h1>VICTORY!</h1>' +
@@ -725,6 +790,60 @@ document.addEventListener('DOMContentLoaded', function() {
         if (bossCard) {
             bossCard.classList.add('boss-defeated-effect');
         }
+
+        // プロジェクト完全制覇の場合は追加エフェクト表示
+        if (projectCleared) {
+            setTimeout(function() {
+                showProjectClearOverlay();
+            }, 2000);
+        }
+    }
+
+    // プロジェクト完全制覇エフェクト表示
+    function showProjectClearOverlay() {
+        // 既存のオーバーレイを削除
+        var existingOverlay = document.querySelector('.victory-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+
+        // 紙吹雪コンテナを作成
+        var confettiContainer = document.createElement('div');
+        confettiContainer.className = 'confetti-container';
+        document.body.appendChild(confettiContainer);
+
+        // 紙吹雪を生成
+        var colors = ['#fbbf24', '#ef4444', '#10b981', '#6366f1', '#ec4899', '#f97316'];
+        for (var i = 0; i < 100; i++) {
+            createConfetti(confettiContainer, colors);
+        }
+
+        // プロジェクト完全制覇オーバーレイ
+        var overlay = document.createElement('div');
+        overlay.className = 'project-clear-overlay';
+        overlay.innerHTML =
+            '<h1>PROJECT CLEAR!</h1>' +
+            '<p style="color: #f3f4f6; font-size: 1.5rem; margin-top: 1rem;">プロジェクト完全制覇！</p>' +
+            '<p style="color: #10b981; font-size: 1.2rem; margin-top: 0.5rem;">全てのボスを討伐しました！</p>' +
+            '<a href="<?php echo \Uri::create('dashboard'); ?>" class="btn btn-success btn-lg mt-4">ダッシュボードに戻る</a>';
+
+        document.body.appendChild(overlay);
+
+        // 紙吹雪を10秒後に削除
+        setTimeout(function() {
+            confettiContainer.remove();
+        }, 10000);
+    }
+
+    // 紙吹雪を1つ生成
+    function createConfetti(container, colors) {
+        var confetti = document.createElement('div');
+        confetti.className = 'confetti';
+        confetti.style.left = Math.random() * 100 + '%';
+        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+        confetti.style.animationDelay = Math.random() * 5 + 's';
+        container.appendChild(confetti);
     }
 
     // レベルアップメッセージ表示

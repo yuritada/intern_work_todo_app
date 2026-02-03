@@ -99,7 +99,8 @@ class Controller_Api_Battle extends \Controller
 
         if ($result['success'])
         {
-            return $this->json_response(array(
+            // レスポンスデータを構築
+            $response_data = array(
                 'success'   => true,
                 'damage'    => $result['damage'],
                 'new_hp'    => $result['new_hp'],
@@ -107,7 +108,29 @@ class Controller_Api_Battle extends \Controller
                 'gained_xp' => $result['gained_xp'],
                 'level_up'  => $result['level_up'],
                 'new_level' => $result['new_level'],
-            ));
+                'project_cleared' => false,
+            );
+
+            // 【Phase 5: プロジェクト完全制覇判定】
+            // ボスを倒した場合、プロジェクト内の全ボスが討伐済みかチェック
+            if ($result['is_dead'])
+            {
+                // タスクからプロジェクトIDを取得
+                $child_task = \DB::select('parent_tasks.project_id')
+                    ->from('child_tasks')
+                    ->join('parent_tasks', 'INNER')
+                    ->on('child_tasks.parent_id', '=', 'parent_tasks.id')
+                    ->where('child_tasks.id', '=', $task_id)
+                    ->execute()
+                    ->current();
+
+                if ($child_task && $child_task['project_id'])
+                {
+                    $response_data['project_cleared'] = \Logic\Battle::check_project_clear($child_task['project_id']);
+                }
+            }
+
+            return $this->json_response($response_data);
         }
         else
         {

@@ -175,6 +175,10 @@
             0%, 100% { filter: brightness(1); }
             50% { filter: brightness(1.5); }
         }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
     </style>
 
     <?php if (isset($extra_css)) echo $extra_css; ?>
