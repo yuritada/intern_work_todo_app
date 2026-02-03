@@ -1,13 +1,14 @@
 version: "3.8"
-
 services:
   app:
     build:
       context: ../
       dockerfile: docker/Dockerfile
-    container_name: fuelphp-app
+    # 変数 ${IMAGE_NAME} と ${CONTAINER_NAME} を使用するように変更
+    image: ${IMAGE_NAME}
+    container_name: ${CONTAINER_NAME}
     ports:
-      - "80:80"
+      - "80:80" # ポート番号は元の設定に合わせてください
     volumes:
       - ../:/var/www/html/my_fuel_project
     networks:
@@ -22,6 +23,9 @@ services:
       MYSQL_DATABASE: fuelphp
     ports:
       - "3306:3306"
+    volumes:
+      - ./db/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - fuelphp-network
 
