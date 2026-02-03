@@ -10,7 +10,7 @@ COMPOSE_FILE := docker/docker-compose.yml
 # ==========================================
 # コマンド定義
 # ==========================================
-.PHONY: up down clean help logs db-shell db-show db-users db-select
+.PHONY: up down clean help logs db-shell db-show db-users db-select cleanup
 
 # デフォルトターゲット
 help:
@@ -18,6 +18,7 @@ help:
 	@echo "  make up      - アプリケーションを立ち上げます (ビルド含む)"
 	@echo "  make down    - コンテナを停止・削除します"
 	@echo "  make clean   - コンテナ、ネットワーク、および作成したイメージ($(IMAGE_NAME))を削除します"
+	@echo "  make cleanup - クリーンアップしてからアプリケーションを立ち上げます"
 	@echo "  make logs    - コンテナのログを表示します"
 	@echo "  make db-shell - DBコンテナに接続してMySQLシェルを開きます"
 	@echo "  make db-show  - DB内のテーブル一覧を表示します
@@ -41,6 +42,10 @@ clean:
 	# -v: ボリュームも削除（DBデータなども消したい場合）
 	docker-compose -f $(COMPOSE_FILE) down --rmi local -v --remove-orphans
 	@echo "Done."
+
+cleanup:
+	@$(MAKE) clean
+	@$(MAKE) up
 
 # ログ表示
 logs:

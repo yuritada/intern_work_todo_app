@@ -30,7 +30,11 @@
                 </div>
                 <?php endif; ?>
 
-                <form action="<?php echo \Uri::create('auth/register'); ?>" method="POST">
+                <!--
+                    【解説: 二重送信防止】
+                    onsubmit で送信ボタンを無効化し、連打による多重リクエストを防止。
+                -->
+                <form action="<?php echo \Uri::create('auth/register'); ?>" method="POST" id="registerForm" onsubmit="return handleRegisterSubmit();">
                     <?php echo \Form::csrf(); ?>
 
                     <div class="mb-3 text-light">
@@ -77,8 +81,9 @@
                     </div>
 
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-quest btn-lg">
-                            冒険者登録
+                        <button type="submit" class="btn btn-quest btn-lg" id="registerSubmitBtn">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" id="registerSpinner"></span>
+                            <span id="registerBtnText">冒険者登録</span>
                         </button>
                     </div>
                 </form>
@@ -150,3 +155,58 @@
         min-width: 50px;
     }
 </style>
+
+<script>
+/**
+ * 【二重送信防止】
+ * フォーム送信時にボタンを無効化し、スピナーを表示。
+ * これにより連打による多重リクエストを防止する。
+ */
+var isSubmitting = false;
+
+function handleRegisterSubmit() {
+    // 既に送信中の場合は無視
+    if (isSubmitting) {
+        return false;
+    }
+
+    // 送信フラグを立てる
+    isSubmitting = true;
+
+    // ボタンを無効化
+    var btn = document.getElementById('registerSubmitBtn');
+    var spinner = document.getElementById('registerSpinner');
+    var btnText = document.getElementById('registerBtnText');
+
+    if (btn) {
+        btn.disabled = true;
+    }
+    if (spinner) {
+        spinner.classList.remove('d-none');
+    }
+    if (btnText) {
+        btnText.textContent = '登録中...';
+    }
+
+    // フォーム送信を許可
+    return true;
+}
+
+// ページ表示時に状態をリセット（ブラウザの戻るボタン対策）
+window.addEventListener('pageshow', function(event) {
+    isSubmitting = false;
+    var btn = document.getElementById('registerSubmitBtn');
+    var spinner = document.getElementById('registerSpinner');
+    var btnText = document.getElementById('registerBtnText');
+
+    if (btn) {
+        btn.disabled = false;
+    }
+    if (spinner) {
+        spinner.classList.add('d-none');
+    }
+    if (btnText) {
+        btnText.textContent = '冒険者登録';
+    }
+});
+</script>

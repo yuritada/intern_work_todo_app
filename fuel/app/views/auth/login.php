@@ -39,7 +39,7 @@
                     POSTリクエスト時に Security::check_token() で検証することで
                     外部サイトからの不正なリクエスト（CSRF攻撃）を防ぎます。
                 -->
-                <form action="<?php echo \Uri::create('auth/login'); ?>" method="POST">
+                <form action="<?php echo \Uri::create('auth/login'); ?>" method="POST" id="loginForm" onsubmit="return handleLoginSubmit();">
                     <?php echo \Form::csrf(); ?>
 
                     <div class="mb-3">
@@ -65,8 +65,9 @@
                     </div>
 
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-quest btn-lg">
-                            ログイン
+                        <button type="submit" class="btn btn-quest btn-lg" id="loginSubmitBtn">
+                            <span class="spinner-border spinner-border-sm d-none" role="status" id="loginSpinner"></span>
+                            <span id="loginBtnText">ログイン</span>
                         </button>
                     </div>
                 </form>
@@ -137,3 +138,40 @@
         color: white !important;
     }
 </style>
+
+<script>
+/**
+ * 【二重送信防止】
+ * フォーム送信時にボタンを無効化し、スピナーを表示。
+ */
+var isSubmitting = false;
+
+function handleLoginSubmit() {
+    if (isSubmitting) {
+        return false;
+    }
+    isSubmitting = true;
+
+    var btn = document.getElementById('loginSubmitBtn');
+    var spinner = document.getElementById('loginSpinner');
+    var btnText = document.getElementById('loginBtnText');
+
+    if (btn) btn.disabled = true;
+    if (spinner) spinner.classList.remove('d-none');
+    if (btnText) btnText.textContent = 'ログイン中...';
+
+    return true;
+}
+
+// ページ表示時に状態をリセット（ブラウザの戻るボタン対策）
+window.addEventListener('pageshow', function(event) {
+    isSubmitting = false;
+    var btn = document.getElementById('loginSubmitBtn');
+    var spinner = document.getElementById('loginSpinner');
+    var btnText = document.getElementById('loginBtnText');
+
+    if (btn) btn.disabled = false;
+    if (spinner) spinner.classList.add('d-none');
+    if (btnText) btnText.textContent = 'ログイン';
+});
+</script>
