@@ -47,6 +47,10 @@ class Controller_Mission extends Controller_Base
     /**
      * 新規ボス作成フォーム表示
      *
+     * 【Phase 5: UX向上】
+     * ボス作成時に攻撃も一緒に登録できるように改善。
+     * 自動バランスモードで攻撃力を自動配分。
+     *
      * @param int $project_id プロジェクトID
      */
     public function action_create($project_id = '')
@@ -65,12 +69,20 @@ class Controller_Mission extends Controller_Base
             \Response::redirect('dashboard');
         }
 
-        // 【Null安全化】boss_ranks キーが存在しない場合に備え、空配列をデフォルトに
+        // 設定を取得
+        $boss_ranks = $this->quest_config['boss_ranks'] ?? array();
+        $psychological_weights = $this->quest_config['psychological_weights'] ?? array(
+            'easy'   => array('label' => '簡単', 'weight' => 5),
+            'normal' => array('label' => '普通', 'weight' => 15),
+            'hard'   => array('label' => 'きつい', 'weight' => 35),
+        );
+
         $data = array(
-            'project'    => $project,
-            'boss_ranks' => $this->quest_config['boss_ranks'] ?? array(),
-            'errors'     => array(),
-            'input'      => array(
+            'project'              => $project,
+            'boss_ranks'           => $boss_ranks,
+            'psychological_weights' => $psychological_weights,
+            'errors'               => array(),
+            'input'                => array(
                 'title'     => '',
                 'boss_rank' => 1,
                 'deadline'  => '',
@@ -92,6 +104,9 @@ class Controller_Mission extends Controller_Base
                 );
                 $data['input'] = $input;
 
+                $tasks_input = \Input::post('tasks', array());
+                $auto_balance = \Input::post('auto_balance', 0);
+
                 // バリデーション
                 if (empty($input['title']))
                 {
@@ -100,21 +115,106 @@ class Controller_Mission extends Controller_Base
 
                 if (empty($data['errors']))
                 {
-                    $boss_id = \Model_Task::create_parent(array(
-                        'project_id' => $project_id,
-                        'title'      => $input['title'],
-                        'boss_rank'  => $input['boss_rank'],
-                        'deadline'   => $input['deadline'] ?: '',
-                    ));
+                    \DB::start_transaction();
 
-                    if ($boss_id)
+                    try
                     {
-                        \Session::set_flash('success', 'ボス「' . $input['title'] . '」が出現しました！');
+                        // ボスを作成
+                        $boss_id = \Model_Task::create_parent(array(
+                            'project_id' => $project_id,
+                            'title'      => $input['title'],
+                            'boss_rank'  => $input['boss_rank'],
+                            'deadline'   => $input['deadline'] ?: '',
+                        ));
+
+                        if ( ! $boss_id)
+                        {
+                            throw new \Exception('ボスの作成に失敗しました。');
+                        }
+
+                        // ボスのHPを取得
+                        $boss = \Model_Task::find_parent_by_id($boss_id);
+                        $boss_hp = $boss ? $boss['boss_hp'] : 100;
+
+                        // 攻撃を登録
+                        $valid_tasks = array();
+                        foreach ($tasks_input as $task)
+                        {
+                            $title = isset($task['title']) ? trim($task['title']) : '';
+                            if ( ! empty($title))
+                            {
+                                $weight_key = isset($task['weight']) ? $task['weight'] : 'normal';
+                                $weight = isset($psychological_weights[$weight_key]['weight'])
+                                    ? $psychological_weights[$weight_key]['weight']
+                                    : 15;
+
+                                $valid_tasks[] = array(
+                                    'title'      => $title,
+                                    'weight_key' => $weight_key,
+                                    'weight'     => $weight,
+                                );
+                            }
+                        }
+
+                        if ( ! empty($valid_tasks))
+                        {
+                            // 自動バランスモード：比率で分配
+                            if ($auto_balance)
+                            {
+                                $total_ratio = 0;
+                                foreach ($valid_tasks as $t)
+                                {
+                                    $total_ratio += $t['weight'];
+                                }
+
+                                $floor_sum = 0;
+                                $calculated_weights = array();
+                                foreach ($valid_tasks as $i => $t)
+                                {
+                                    $w = ($total_ratio > 0) ? (int)floor($boss_hp * $t['weight'] / $total_ratio) : 1;
+                                    $calculated_weights[$i] = $w;
+                                    $floor_sum += $w;
+                                }
+
+                                // 端数を最初のタスクに加算
+                                $remainder = $boss_hp - $floor_sum;
+                                if ($remainder > 0 && count($calculated_weights) > 0)
+                                {
+                                    $calculated_weights[0] += $remainder;
+                                }
+
+                                foreach ($valid_tasks as $i => $t)
+                                {
+                                    $valid_tasks[$i]['weight'] = max(1, $calculated_weights[$i]);
+                                }
+                            }
+
+                            // タスクを登録
+                            foreach ($valid_tasks as $t)
+                            {
+                                \Model_Task::create_child(array(
+                                    'parent_id' => $boss_id,
+                                    'title'     => $t['title'],
+                                    'weight'    => $t['weight'],
+                                ));
+                            }
+                        }
+
+                        \DB::commit_transaction();
+
+                        $message = 'ボス「' . $input['title'] . '」が出現しました！';
+                        if (count($valid_tasks) > 0)
+                        {
+                            $message .= '（' . count($valid_tasks) . '件の攻撃を登録）';
+                        }
+                        \Session::set_flash('success', $message);
                         \Response::redirect('mission/detail/' . $boss_id);
+
                     }
-                    else
+                    catch (\Exception $e)
                     {
-                        $data['errors'][] = 'ボスの作成に失敗しました。';
+                        \DB::rollback_transaction();
+                        $data['errors'][] = $e->getMessage();
                     }
                 }
             }
@@ -409,6 +509,200 @@ class Controller_Mission extends Controller_Base
 
         $this->template->title = '攻撃を一斉登録 - ' . $boss['title'];
         $this->template->content = \View::forge('mission/bulk', $data);
+    }
+
+    /**
+     * 攻撃編集画面
+     *
+     * 【Phase 5: UX向上 - 攻撃全体編集】
+     * 既存の攻撃を表示し、追加・削除・ダメージ再計算ができる画面です。
+     *
+     * @param int $parent_id 親タスク（ボス）ID
+     */
+    public function action_edit_attacks($parent_id = '')
+    {
+        if ( ! $parent_id)
+        {
+            \Session::set_flash('error', 'ボスが指定されていません。');
+            \Response::redirect('dashboard');
+        }
+
+        // 親タスクと子タスクを取得
+        $boss = \Model_Task::find_parent_with_children($parent_id, $this->current_user['id']);
+
+        if ( ! $boss)
+        {
+            \Session::set_flash('error', '指定されたボスが見つかりません。');
+            \Response::redirect('dashboard');
+        }
+
+        // ボスランク情報を取得
+        $boss_ranks = $this->quest_config['boss_ranks'] ?? array();
+        $rank_info = isset($boss_ranks[$boss['boss_rank']]) ? $boss_ranks[$boss['boss_rank']] : array('label' => '不明');
+
+        // 心理的重み設定を取得
+        $psychological_weights = $this->quest_config['psychological_weights'] ?? array(
+            'easy'   => array('label' => '簡単', 'weight' => 5, 'description' => 'すぐに終わる軽いタスク'),
+            'normal' => array('label' => '普通', 'weight' => 15, 'description' => '通常の作業量のタスク'),
+            'hard'   => array('label' => 'きつい', 'weight' => 35, 'description' => '時間がかかる重いタスク'),
+        );
+
+        $data = array(
+            'boss'                  => $boss,
+            'rank_info'             => $rank_info,
+            'psychological_weights' => $psychological_weights,
+            'errors'                => array(),
+        );
+
+        // POST処理
+        if (\Input::method() === 'POST')
+        {
+            if ( ! \Security::check_token())
+            {
+                $data['errors'][] = '不正なリクエストです。';
+            }
+            else
+            {
+                $tasks_input = \Input::post('tasks', array());
+                $auto_balance = \Input::post('auto_balance', 0);
+
+                \DB::start_transaction();
+
+                try
+                {
+                    // 既存の子タスクを全て論理削除
+                    $now = date('Y-m-d H:i:s');
+                    \DB::update('child_tasks')
+                        ->set(array(
+                            'deleted_at' => $now,
+                            'updated_at' => $now,
+                        ))
+                        ->where('parent_id', '=', $parent_id)
+                        ->where('deleted_at', 'IS', \DB::expr('NULL'))
+                        ->execute();
+
+                    // 新しいタスクを登録
+                    $valid_tasks = array();
+                    foreach ($tasks_input as $task)
+                    {
+                        $title = isset($task['title']) ? trim($task['title']) : '';
+                        if ( ! empty($title))
+                        {
+                            $weight_key = isset($task['weight']) ? $task['weight'] : 'normal';
+                            $weight = isset($psychological_weights[$weight_key]['weight'])
+                                ? $psychological_weights[$weight_key]['weight']
+                                : 15;
+                            $done = isset($task['done']) && $task['done'] ? 1 : 0;
+
+                            $valid_tasks[] = array(
+                                'title'      => $title,
+                                'weight_key' => $weight_key,
+                                'weight'     => $weight,
+                                'done'       => $done,
+                            );
+                        }
+                    }
+
+                    if (empty($valid_tasks))
+                    {
+                        // タスクが0件の場合もOK（ボスのHP復元）
+                        // current_hpをboss_hpにリセット
+                        \DB::update('parent_tasks')
+                            ->set(array(
+                                'current_hp' => $boss['boss_hp'],
+                                'done'       => 0,
+                                'updated_at' => $now,
+                            ))
+                            ->where('id', '=', $parent_id)
+                            ->execute();
+                    }
+                    else
+                    {
+                        // 自動バランスモード：比率で分配
+                        if ($auto_balance)
+                        {
+                            $total_ratio = 0;
+                            foreach ($valid_tasks as $t)
+                            {
+                                $total_ratio += $t['weight'];
+                            }
+
+                            $floor_sum = 0;
+                            $calculated_weights = array();
+                            foreach ($valid_tasks as $i => $t)
+                            {
+                                $w = ($total_ratio > 0) ? (int)floor($boss['boss_hp'] * $t['weight'] / $total_ratio) : 1;
+                                $calculated_weights[$i] = $w;
+                                $floor_sum += $w;
+                            }
+
+                            // 端数を最初のタスクに加算
+                            $remainder = $boss['boss_hp'] - $floor_sum;
+                            if ($remainder > 0 && count($calculated_weights) > 0)
+                            {
+                                $calculated_weights[0] += $remainder;
+                            }
+
+                            foreach ($valid_tasks as $i => $t)
+                            {
+                                $valid_tasks[$i]['weight'] = max(1, $calculated_weights[$i]);
+                            }
+                        }
+
+                        // タスクを登録し、ダメージを計算
+                        $total_damage = 0;
+                        $completed_damage = 0;
+
+                        foreach ($valid_tasks as $t)
+                        {
+                            \DB::insert('child_tasks')
+                                ->set(array(
+                                    'parent_id'  => (int)$parent_id,
+                                    'title'      => $t['title'],
+                                    'weight'     => $t['weight'],
+                                    'done'       => $t['done'],
+                                    'created_at' => $now,
+                                    'updated_at' => $now,
+                                ))
+                                ->execute();
+
+                            $total_damage += $t['weight'];
+                            if ($t['done'])
+                            {
+                                $completed_damage += $t['weight'];
+                            }
+                        }
+
+                        // ボスのHPを再計算
+                        $new_current_hp = max(0, $boss['boss_hp'] - $completed_damage);
+                        $is_dead = ($new_current_hp <= 0);
+
+                        \DB::update('parent_tasks')
+                            ->set(array(
+                                'current_hp' => $new_current_hp,
+                                'done'       => $is_dead ? 1 : 0,
+                                'updated_at' => $now,
+                            ))
+                            ->where('id', '=', $parent_id)
+                            ->execute();
+                    }
+
+                    \DB::commit_transaction();
+
+                    \Session::set_flash('success', '攻撃を更新しました。');
+                    \Response::redirect('mission/detail/' . $parent_id);
+
+                }
+                catch (\Exception $e)
+                {
+                    \DB::rollback_transaction();
+                    $data['errors'][] = $e->getMessage();
+                }
+            }
+        }
+
+        $this->template->title = '攻撃を編集 - ' . $boss['title'];
+        $this->template->content = \View::forge('mission/edit_attacks', $data);
     }
 
     /**

@@ -90,22 +90,17 @@
 <div class="card card-quest">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">攻撃アクション（タスク）</h5>
-        <div class="btn-group">
-            <a href="<?php echo \Uri::create('mission/bulk/' . $boss['id']); ?>" class="btn btn-outline-light btn-sm">
-                一斉登録
-            </a>
-            <button class="btn btn-quest btn-sm" data-bs-toggle="modal" data-bs-target="#addTaskModal">
-                + 攻撃を追加
-            </button>
-        </div>
+        <a href="<?php echo \Uri::create('mission/edit_attacks/' . $boss['id']); ?>" class="btn btn-quest btn-sm">
+            攻撃を編集
+        </a>
     </div>
     <div class="card-body" id="task-list-container">
         <!-- タスクがない場合の表示 -->
         <div class="text-center py-4" data-bind="visible: tasks().length === 0">
             <p class="text-light mb-3">まだ攻撃アクションがありません。</p>
-            <button class="btn btn-quest" data-bs-toggle="modal" data-bs-target="#addTaskModal">
-                + 最初の攻撃を追加
-            </button>
+            <a href="<?php echo \Uri::create('mission/edit_attacks/' . $boss['id']); ?>" class="btn btn-quest">
+                + 攻撃を追加
+            </a>
         </div>
 
         <!-- タスク一覧 -->
@@ -124,10 +119,6 @@
                     <span class="task-title" data-bind="text: title, css: { 'text-decoration-line-through': done() }"></span>
                     <span class="badge bg-warning text-dark ms-2" data-bind="text: 'DMG: ' + weight()"></span>
                 </div>
-                <button type="button" class="btn btn-outline-danger btn-sm"
-                        data-bind="click: $parent.deleteTask">
-                    削除
-                </button>
             </div>
         </div>
     </div>
@@ -137,58 +128,6 @@
     <a href="<?php echo \Uri::create('dashboard/project/' . $boss['project_id']); ?>" class="btn btn-outline-light">
         プロジェクトに戻る
     </a>
-</div>
-
-<!-- タスク追加モーダル（Ajax対応） -->
-<div class="modal fade" id="addTaskModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content bg-dark text-light">
-            <div class="modal-header border-secondary">
-                <h5 class="modal-title">攻撃を追加</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <!--
-                【解説: フォームのフォールバック対策】
-                action="javascript:void(0)" により、JSがクラッシュしてもページ遷移を防止。
-                onsubmit="return false" により、デフォルトのフォーム送信を確実に防止。
-                正常時はJSのイベントハンドラでAjax送信を行う。
-            -->
-            <form id="addTaskForm" action="javascript:void(0)" method="POST" onsubmit="return false;">
-                <input type="hidden" name="boss_id" value="<?php echo $boss['id']; ?>">
-                <input type="hidden" name="<?php echo \Config::get('security.csrf_token_key', 'fuel_csrf_token'); ?>" value="<?php echo \Security::fetch_token(); ?>">
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="task_title" class="form-label">攻撃名（タスク名）</label>
-                        <input type="text"
-                               class="form-control bg-dark text-light border-secondary"
-                               id="task_title"
-                               name="title"
-                               placeholder="例: デザイン案を作成する"
-                               required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="task_weight" class="form-label">ダメージ量（1〜100）</label>
-                        <input type="number"
-                               class="form-control bg-dark text-light border-secondary"
-                               id="task_weight"
-                               name="weight"
-                               value="10"
-                               min="1"
-                               max="100">
-                        <div class="form-text" style="color: #9ca3af;">タスク完了時にボスに与えるダメージ</div>
-                    </div>
-                    <div id="addTaskError" class="alert alert-danger d-none"></div>
-                </div>
-                <div class="modal-footer border-secondary">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">キャンセル</button>
-                    <button type="submit" class="btn btn-quest" id="addTaskSubmit">
-                        <span class="spinner-border spinner-border-sm d-none" role="status"></span>
-                        追加する
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
 </div>
 
 <style>
@@ -274,7 +213,7 @@
         position: fixed;
         font-size: 2rem;
         font-weight: bold;
-        color: #ef4444;
+        color: #02e35c;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
         pointer-events: none;
         z-index: 1060;
@@ -514,131 +453,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return 'hp-low';
         });
 
-        // タスク削除
-        self.deleteTask = function(task) {
-            if (self.isProcessing()) {
-                return false;
-            }
-
-            if (!confirm('この攻撃を削除しますか？')) {
-                return false;
-            }
-
-            self.isProcessing(true);
-
-            // 【修正】動的CSRFトークンを使用
-            var postData = {
-                task_id: task.id()
-            };
-            postData[csrfTokenKey] = csrfToken;
-
-            $.ajax({
-                url: '<?php echo \Uri::base(); ?>api/battle/delete_task',
-                type: 'POST',
-                data: postData,
-                dataType: 'json',
-                success: function(response) {
-                    // CSRFトークンを更新
-                    updateCsrfToken(response);
-
-                    if (response.success) {
-                        // タスクを配列から削除
-                        self.tasks.remove(task);
-                        self.totalTasks(self.totalTasks() - 1);
-                        if (task.done()) {
-                            self.completedTasks(self.completedTasks() - 1);
-                        }
-                        showSuccessMessage(response.message || 'タスクを削除しました。');
-                    } else {
-                        showErrorMessage(response.error || 'タスクの削除に失敗しました。');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    // 【修正】詳細なエラー情報をコンソールに出力
-                    console.error('Delete task error:', {
-                        status: xhr.status,
-                        statusText: xhr.statusText,
-                        responseText: xhr.responseText,
-                        error: error
-                    });
-                    showErrorMessage('通信エラーが発生しました。（' + xhr.status + '）');
-                },
-                complete: function() {
-                    self.isProcessing(false);
-                }
-            });
-
-            return false;
-        };
-
-        // タスク追加
-        self.addTask = function(title, weight) {
-            // 【修正】動的CSRFトークンを使用
-            var postData = {
-                boss_id: <?php echo (int)$boss['id']; ?>,
-                title: title,
-                weight: weight
-            };
-            postData[csrfTokenKey] = csrfToken;
-
-            $.ajax({
-                url: '<?php echo \Uri::base(); ?>api/battle/add_task',
-                type: 'POST',
-                data: postData,
-                dataType: 'json',
-                success: function(response) {
-                    // CSRFトークンを更新
-                    updateCsrfToken(response);
-
-                    if (response.success) {
-                        // 新しいタスクを配列に追加
-                        self.tasks.push({
-                            id: ko.observable(response.task.id),
-                            title: ko.observable(response.task.title),
-                            weight: ko.observable(response.task.weight),
-                            done: ko.observable(false)
-                        });
-                        self.totalTasks(self.totalTasks() + 1);
-
-                        // モーダルを閉じてフォームをリセット
-                        var modal = bootstrap.Modal.getInstance(document.getElementById('addTaskModal'));
-                        if (modal) modal.hide();
-                        document.getElementById('addTaskForm').reset();
-                        document.getElementById('task_weight').value = '10';
-
-                        showSuccessMessage(response.message || '攻撃を追加しました。');
-                    } else {
-                        document.getElementById('addTaskError').textContent = response.error;
-                        document.getElementById('addTaskError').classList.remove('d-none');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    // 【修正】詳細なエラー情報をコンソールに出力
-                    console.error('Add task error:', {
-                        status: xhr.status,
-                        statusText: xhr.statusText,
-                        responseText: xhr.responseText,
-                        error: error
-                    });
-                    // エラーメッセージをユーザーに表示
-                    var errorMsg = '通信エラーが発生しました。';
-                    if (xhr.status === 403) {
-                        errorMsg = 'セッションが切れました。ページを再読み込みしてください。';
-                    } else if (xhr.status === 404) {
-                        errorMsg = 'APIエンドポイントが見つかりません。';
-                    } else if (xhr.status === 500) {
-                        errorMsg = 'サーバーエラーが発生しました。';
-                    }
-                    document.getElementById('addTaskError').textContent = errorMsg;
-                    document.getElementById('addTaskError').classList.remove('d-none');
-                },
-                complete: function() {
-                    document.getElementById('addTaskSubmit').disabled = false;
-                    document.querySelector('#addTaskSubmit .spinner-border').classList.add('d-none');
-                }
-            });
-        };
-
         // タスク完了/未完了をトグル
         self.toggleTask = function(task, event) {
             // 処理中は無視
@@ -748,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function showDamageEffect(damage, event) {
         var damageEl = document.createElement('div');
         damageEl.className = 'damage-effect';
-        damageEl.textContent = '-' + damage;
+        damageEl.textContent = damage + ' HP';
 
         // クリック位置の近くに表示
         var rect = event.target.getBoundingClientRect();
@@ -884,37 +698,6 @@ document.addEventListener('DOMContentLoaded', function() {
             alert.classList.add('d-none');
         }, 3000);
     }
-
-    // タスク追加フォームのイベントハンドラー
-    document.getElementById('addTaskForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-
-        var title = document.getElementById('task_title').value.trim();
-        var weight = parseInt(document.getElementById('task_weight').value) || 10;
-
-        if (!title) {
-            document.getElementById('addTaskError').textContent = 'タスク名を入力してください。';
-            document.getElementById('addTaskError').classList.remove('d-none');
-            return;
-        }
-
-        // エラー表示をリセット
-        document.getElementById('addTaskError').classList.add('d-none');
-
-        // ボタンを無効化してスピナー表示
-        document.getElementById('addTaskSubmit').disabled = true;
-        document.querySelector('#addTaskSubmit .spinner-border').classList.remove('d-none');
-
-        // ViewModelのaddTaskを呼び出し
-        viewModel.addTask(title, weight);
-    });
-
-    // モーダルが閉じられたらエラー表示をリセット
-    document.getElementById('addTaskModal').addEventListener('hidden.bs.modal', function() {
-        document.getElementById('addTaskError').classList.add('d-none');
-        document.getElementById('addTaskForm').reset();
-        document.getElementById('task_weight').value = '10';
-    });
 
     // ナビバーのユーザーステータスを更新
     function updateUserStatus() {
