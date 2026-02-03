@@ -151,9 +151,35 @@
             background-color: #0ea5e9 !important;
             color: #ffffff !important;
         }
+
+        /* レベルアップアニメーション */
+        .user-level.level-up-animation {
+            animation: levelUpPulse 0.5s ease 3;
+        }
+
+        @keyframes levelUpPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); background: #fbbf24; }
+        }
+
+        /* XPバー更新アニメーション */
+        .xp-bar {
+            transition: width 0.5s ease;
+        }
+
+        .xp-bar.xp-gain-animation {
+            animation: xpGain 0.3s ease;
+        }
+
+        @keyframes xpGain {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.5); }
+        }
     </style>
 
     <?php if (isset($extra_css)) echo $extra_css; ?>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/knockout/3.5.0/knockout-min.js"></script>
 </head>
 <body>
     <!-- ナビゲーションバー -->
@@ -248,12 +274,8 @@
         </div>
     </footer>
 
-    <!-- JavaScript -->
+    <!-- Bootstrap JS（Bootstrap はDOM操作が必要なので body 末尾で読み込み） -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-
-    <!-- Knockout.js (Phase 4 で使用) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/knockout/3.5.1/knockout-min.js"></script>
 
     <?php if (isset($extra_js)) echo $extra_js; ?>
 </body>

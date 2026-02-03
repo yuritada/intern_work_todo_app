@@ -306,6 +306,7 @@ class Model_Task
     {
         if (empty($data['parent_id']) || empty($data['title']))
         {
+            \Log::warning('create_child: parent_id または title が空です。', $data);
             return false;
         }
 
@@ -321,11 +322,19 @@ class Model_Task
             'updated_at' => date('Y-m-d H:i:s'),
         );
 
-        $result = \DB::insert('child_tasks')
-            ->set($insert_data)
-            ->execute();
+        try
+        {
+            $result = \DB::insert('child_tasks')
+                ->set($insert_data)
+                ->execute();
 
-        return isset($result[0]) ? $result[0] : false;
+            return isset($result[0]) ? $result[0] : false;
+        }
+        catch (\Database_Exception $e)
+        {
+            \Log::error('create_child: DBエラー - ' . $e->getMessage(), $insert_data);
+            return false;
+        }
     }
 
     /**

@@ -94,43 +94,37 @@
             + 攻撃を追加
         </button>
     </div>
-    <div class="card-body">
-        <?php if (empty($boss['children'])): ?>
-        <div class="text-center py-4">
+    <div class="card-body" id="task-list-container">
+        <!-- タスクがない場合の表示 -->
+        <div class="text-center py-4" data-bind="visible: tasks().length === 0">
             <p class="text-light mb-3">まだ攻撃アクションがありません。</p>
             <button class="btn btn-quest" data-bs-toggle="modal" data-bs-target="#addTaskModal">
                 + 最初の攻撃を追加
             </button>
         </div>
-        <?php else: ?>
-        <!--
-            【解説: foreach バインディング】
-            tasks 配列の各要素に対してHTML要素を繰り返し生成します。
-            $data で現在の要素、$index で配列のインデックスにアクセスできます。
-        -->
-        <div class="task-list" data-bind="foreach: tasks">
-            <div class="task-item d-flex align-items-center p-3 mb-2" data-bind="css: { 'task-completed': done() }">
+
+        <!-- タスク一覧 -->
+        <div class="task-list" data-bind="visible: tasks().length > 0, foreach: tasks">
+            <div class="task-item d-flex align-items-center p-3 mb-2" data-bind="css: { 'task-completed': done() }, attr: { 'data-task-id': id() }">
                 <!--
-                    【解説: click バインディング】
-                    チェックボックスクリック時に toggleTask 関数を実行
-                    これによりAjax通信が発生し、サーバーと同期します
+                    【解説: チェックボックスのバインディング】
+                    checked: done（双方向）ではなく attr: { checked: done }（一方向）を使用。
+                    双方向バインディングだとclick時に自動でdone()がトグルされ、
+                    Ajax通信との競合が発生するため、一方向にして手動制御する。
                 -->
                 <input type="checkbox"
                        class="form-check-input me-3 task-checkbox"
-                       data-bind="checked: done, click: $parent.toggleTask">
+                       data-bind="attr: { checked: done }, click: $parent.toggleTask">
                 <div class="flex-grow-1">
                     <span class="task-title" data-bind="text: title, css: { 'text-decoration-line-through': done() }"></span>
                     <span class="badge bg-warning text-dark ms-2" data-bind="text: 'DMG: ' + weight()"></span>
                 </div>
-                <form data-bind="attr: { action: '<?php echo \Uri::base(); ?>mission/delete_task/' + id() }" method="POST" class="d-inline">
-                    <input type="hidden" name="<?php echo \Config::get('security.csrf_token_key', 'fuel_csrf_token'); ?>" value="<?php echo \Security::fetch_token(); ?>">
-                    <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('この攻撃を削除しますか？');">
-                        削除
-                    </button>
-                </form>
+                <button type="button" class="btn btn-outline-danger btn-sm"
+                        data-bind="click: $parent.deleteTask">
+                    削除
+                </button>
             </div>
         </div>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -140,7 +134,7 @@
     </a>
 </div>
 
-<!-- タスク追加モーダル -->
+<!-- タスク追加モーダル（Ajax対応） -->
 <div class="modal fade" id="addTaskModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content bg-dark text-light">
@@ -148,8 +142,15 @@
                 <h5 class="modal-title">攻撃を追加</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form action="<?php echo \Uri::create('mission/add_task/' . $boss['id']); ?>" method="POST">
-                <?php echo \Form::csrf(); ?>
+            <!--
+                【解説: フォームのフォールバック対策】
+                action="javascript:void(0)" により、JSがクラッシュしてもページ遷移を防止。
+                onsubmit="return false" により、デフォルトのフォーム送信を確実に防止。
+                正常時はJSのイベントハンドラでAjax送信を行う。
+            -->
+            <form id="addTaskForm" action="javascript:void(0)" method="POST" onsubmit="return false;">
+                <input type="hidden" name="boss_id" value="<?php echo $boss['id']; ?>">
+                <input type="hidden" name="<?php echo \Config::get('security.csrf_token_key', 'fuel_csrf_token'); ?>" value="<?php echo \Security::fetch_token(); ?>">
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="task_title" class="form-label">攻撃名（タスク名）</label>
@@ -171,10 +172,14 @@
                                max="100">
                         <div class="form-text" style="color: #9ca3af;">タスク完了時にボスに与えるダメージ</div>
                     </div>
+                    <div id="addTaskError" class="alert alert-danger d-none"></div>
                 </div>
                 <div class="modal-footer border-secondary">
                     <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">キャンセル</button>
-                    <button type="submit" class="btn btn-quest">追加する</button>
+                    <button type="submit" class="btn btn-quest" id="addTaskSubmit">
+                        <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                        追加する
+                    </button>
                 </div>
             </form>
         </div>
@@ -258,15 +263,151 @@
             opacity: 1;
         }
     }
+
+    /* ダメージエフェクト */
+    .damage-effect {
+        position: fixed;
+        font-size: 2rem;
+        font-weight: bold;
+        color: #ef4444;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+        z-index: 1060;
+        animation: damageFloat 1s ease-out forwards;
+    }
+
+    @keyframes damageFloat {
+        0% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        50% {
+            transform: translateY(-30px) scale(1.2);
+        }
+        100% {
+            opacity: 0;
+            transform: translateY(-60px) scale(0.8);
+        }
+    }
+
+    /* HPバー減少アニメーション */
+    .hp-damage-flash {
+        animation: hpFlash 0.3s ease;
+    }
+
+    @keyframes hpFlash {
+        0%, 100% { filter: brightness(1); }
+        50% { filter: brightness(1.5); }
+    }
+
+    /* ボス討伐エフェクト */
+    .boss-defeated-effect {
+        animation: defeatPulse 0.5s ease;
+    }
+
+    @keyframes defeatPulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+
+    /* タスク完了チェックアニメーション */
+    .task-check-animation {
+        animation: checkBounce 0.3s ease;
+    }
+
+    @keyframes checkBounce {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.3); }
+        100% { transform: scale(1); }
+    }
+
+    /* 勝利オーバーレイ */
+    .victory-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1100;
+        animation: fadeIn 0.5s ease;
+    }
+
+    .victory-overlay h1 {
+        font-size: 4rem;
+        color: #fbbf24;
+        text-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+        animation: victoryText 1s ease infinite;
+    }
+
+    @keyframes victoryText {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
 </style>
 
 <!--
     【解説: Knockout.js ViewModel】
     ページ下部でViewModelを定義し、ko.applyBindings() でHTMLとバインドします。
     observableを使用することで、値の変更が自動的にUIに反映されます。
+
+    【重要: ライブラリ読み込み順序】
+    jQuery と Knockout.js は template.php の <head> 内で読み込まれている必要がある。
+    このスクリプトは $content として template.php 内で展開されるため、
+    <head> 内でライブラリが読み込まれていれば、ここで ko と $ が利用可能。
 -->
 <script>
+// 【即時チェック】ライブラリが読み込まれているか確認（DOMContentLoaded の外側）
+(function() {
+    if (typeof ko === 'undefined') {
+        console.error('[FATAL] Knockout.js が読み込まれていません。template.php の <head> 内で knockout.js を読み込んでください。');
+        // フォームのデフォルト動作を無効化（JSクラッシュ対策）
+        var form = document.getElementById('addTaskForm');
+        if (form) {
+            form.onsubmit = function() { return false; };
+        }
+    }
+    if (typeof jQuery === 'undefined' && typeof $ === 'undefined') {
+        console.error('[FATAL] jQuery が読み込まれていません。template.php の <head> 内で jquery.js を読み込んでください。');
+    }
+})();
+
 document.addEventListener('DOMContentLoaded', function() {
+    // 【解説: ライブラリ存在チェック】
+    // Knockout.js と jQuery が正しく読み込まれているか確認
+    if (typeof ko === 'undefined') {
+        console.error('Knockout.js が読み込まれていません。template.php の script タグを確認してください。');
+        document.getElementById('addTaskError').textContent = 'システムエラー: ページを再読み込みしてください。';
+        document.getElementById('addTaskError').classList.remove('d-none');
+        return;
+    }
+    if (typeof $ === 'undefined' && typeof jQuery === 'undefined') {
+        console.error('jQuery が読み込まれていません。template.php の script タグを確認してください。');
+        return;
+    }
+
+    // 【解説: CSRFトークン管理】
+    // Ajax通信後にトークンが再生成されるため、グローバル変数で管理
+    var csrfTokenKey = '<?php echo \Config::get('security.csrf_token_key', 'fuel_csrf_token'); ?>';
+    var csrfToken = '<?php echo \Security::fetch_token(); ?>';
+
+    // CSRFトークンを更新するヘルパー関数
+    function updateCsrfToken(response) {
+        if (response.csrf_token) {
+            csrfToken = response.csrf_token;
+        }
+    }
+
     // ViewModel定義
     function BattleViewModel() {
         var self = this;
@@ -276,19 +417,21 @@ document.addEventListener('DOMContentLoaded', function() {
         self.maxHp = ko.observable(<?php echo (int)$boss['boss_hp']; ?>);
         self.completedTasks = ko.observable(<?php echo (int)$boss['completed_tasks']; ?>);
         self.totalTasks = ko.observable(<?php echo (int)$boss['total_tasks']; ?>);
-        self.isDead = ko.observable(<?php echo $boss['done'] ? 'true' : 'false'; ?>);
+        // 【修正】boolean値を正しく出力（クォートなし）
+        self.isDead = ko.observable(<?php echo ($boss['done'] == 1) ? 'true' : 'false'; ?>);
+        self.isProcessing = ko.observable(false); // 処理中フラグ
 
         // タスク配列（observableArray）
         // 【Null安全化】$boss['children']が存在しない場合に備えたフォールバック
         self.tasks = ko.observableArray([
             <?php $children = isset($boss['children']) && is_array($boss['children']) ? $boss['children'] : array(); ?>
-            <?php foreach ($children as $child): ?>
+            <?php foreach ($children as $i => $child): ?>
             {
                 id: ko.observable(<?php echo (int)$child['id']; ?>),
                 title: ko.observable('<?php echo addslashes($child['title']); ?>'),
                 weight: ko.observable(<?php echo (int)$child['weight']; ?>),
-                done: ko.observable(<?php echo $child['done'] ? 'true' : 'false'; ?>)
-            },
+                done: ko.observable(<?php echo ($child['done'] == 1) ? 'true' : 'false'; ?>)
+            }<?php echo ($i < count($children) - 1) ? ',' : ''; ?>
             <?php endforeach; ?>
         ]);
 
@@ -306,9 +449,150 @@ document.addEventListener('DOMContentLoaded', function() {
             return 'hp-low';
         });
 
+        // タスク削除
+        self.deleteTask = function(task) {
+            if (self.isProcessing()) {
+                return false;
+            }
+
+            if (!confirm('この攻撃を削除しますか？')) {
+                return false;
+            }
+
+            self.isProcessing(true);
+
+            // 【修正】動的CSRFトークンを使用
+            var postData = {
+                task_id: task.id()
+            };
+            postData[csrfTokenKey] = csrfToken;
+
+            $.ajax({
+                url: '<?php echo \Uri::base(); ?>api/battle/delete_task',
+                type: 'POST',
+                data: postData,
+                dataType: 'json',
+                success: function(response) {
+                    // CSRFトークンを更新
+                    updateCsrfToken(response);
+
+                    if (response.success) {
+                        // タスクを配列から削除
+                        self.tasks.remove(task);
+                        self.totalTasks(self.totalTasks() - 1);
+                        if (task.done()) {
+                            self.completedTasks(self.completedTasks() - 1);
+                        }
+                        showSuccessMessage(response.message || 'タスクを削除しました。');
+                    } else {
+                        showErrorMessage(response.error || 'タスクの削除に失敗しました。');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    // 【修正】詳細なエラー情報をコンソールに出力
+                    console.error('Delete task error:', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseText: xhr.responseText,
+                        error: error
+                    });
+                    showErrorMessage('通信エラーが発生しました。（' + xhr.status + '）');
+                },
+                complete: function() {
+                    self.isProcessing(false);
+                }
+            });
+
+            return false;
+        };
+
+        // タスク追加
+        self.addTask = function(title, weight) {
+            // 【修正】動的CSRFトークンを使用
+            var postData = {
+                boss_id: <?php echo (int)$boss['id']; ?>,
+                title: title,
+                weight: weight
+            };
+            postData[csrfTokenKey] = csrfToken;
+
+            $.ajax({
+                url: '<?php echo \Uri::base(); ?>api/battle/add_task',
+                type: 'POST',
+                data: postData,
+                dataType: 'json',
+                success: function(response) {
+                    // CSRFトークンを更新
+                    updateCsrfToken(response);
+
+                    if (response.success) {
+                        // 新しいタスクを配列に追加
+                        self.tasks.push({
+                            id: ko.observable(response.task.id),
+                            title: ko.observable(response.task.title),
+                            weight: ko.observable(response.task.weight),
+                            done: ko.observable(false)
+                        });
+                        self.totalTasks(self.totalTasks() + 1);
+
+                        // モーダルを閉じてフォームをリセット
+                        var modal = bootstrap.Modal.getInstance(document.getElementById('addTaskModal'));
+                        if (modal) modal.hide();
+                        document.getElementById('addTaskForm').reset();
+                        document.getElementById('task_weight').value = '10';
+
+                        showSuccessMessage(response.message || '攻撃を追加しました。');
+                    } else {
+                        document.getElementById('addTaskError').textContent = response.error;
+                        document.getElementById('addTaskError').classList.remove('d-none');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    // 【修正】詳細なエラー情報をコンソールに出力
+                    console.error('Add task error:', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseText: xhr.responseText,
+                        error: error
+                    });
+                    // エラーメッセージをユーザーに表示
+                    var errorMsg = '通信エラーが発生しました。';
+                    if (xhr.status === 403) {
+                        errorMsg = 'セッションが切れました。ページを再読み込みしてください。';
+                    } else if (xhr.status === 404) {
+                        errorMsg = 'APIエンドポイントが見つかりません。';
+                    } else if (xhr.status === 500) {
+                        errorMsg = 'サーバーエラーが発生しました。';
+                    }
+                    document.getElementById('addTaskError').textContent = errorMsg;
+                    document.getElementById('addTaskError').classList.remove('d-none');
+                },
+                complete: function() {
+                    document.getElementById('addTaskSubmit').disabled = false;
+                    document.querySelector('#addTaskSubmit .spinner-border').classList.add('d-none');
+                }
+            });
+        };
+
         // タスク完了/未完了をトグル
-        self.toggleTask = function(task) {
+        self.toggleTask = function(task, event) {
+            // 処理中は無視
+            if (self.isProcessing()) {
+                return false;
+            }
+
             var newDone = !task.done();
+            self.isProcessing(true);
+
+            // チェックボックスにアニメーションクラスを追加
+            var checkbox = event.target;
+            checkbox.classList.add('task-check-animation');
+
+            // 【修正】動的CSRFトークンを使用
+            var postData = {
+                task_id: task.id()
+            };
+            postData[csrfTokenKey] = csrfToken;
 
             // 【解説: Ajax通信】
             // jQueryの$.ajaxでサーバーと非同期通信
@@ -316,15 +600,21 @@ document.addEventListener('DOMContentLoaded', function() {
             $.ajax({
                 url: '<?php echo \Uri::base(); ?>api/battle/' + (newDone ? 'attack' : 'undo'),
                 type: 'POST',
-                data: {
-                    task_id: task.id(),
-                    <?php echo \Config::get('security.csrf_token_key', 'fuel_csrf_token'); ?>: '<?php echo \Security::fetch_token(); ?>'
-                },
+                data: postData,
                 dataType: 'json',
                 success: function(response) {
+                    // CSRFトークンを更新
+                    updateCsrfToken(response);
+
                     if (response.success) {
                         // タスクの状態を更新
                         task.done(newDone);
+
+                        // ダメージエフェクト表示（攻撃時のみ）
+                        if (newDone && response.damage) {
+                            showDamageEffect(response.damage, event);
+                            flashHpBar();
+                        }
 
                         // HPを更新
                         self.currentHp(response.new_hp);
@@ -339,7 +629,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         // ボス討伐時
                         if (response.is_dead) {
                             self.isDead(true);
-                            showVictoryMessage(response.gained_xp);
+                            showVictoryOverlay(response.gained_xp);
+                            updateUserStatus(); // ナビバーのXP更新
                         }
 
                         // レベルアップ時
@@ -347,45 +638,193 @@ document.addEventListener('DOMContentLoaded', function() {
                             showLevelUpMessage(response.new_level);
                         }
                     } else {
-                        alert('エラーが発生しました: ' + (response.error || '不明なエラー'));
+                        showErrorMessage(response.error || '不明なエラー');
                         // チェックボックスを元に戻す
                         task.done(!newDone);
                     }
                 },
-                error: function() {
-                    alert('通信エラーが発生しました。');
+                error: function(xhr, status, error) {
+                    // 【修正】詳細なエラー情報をコンソールに出力
+                    console.error('Toggle task error:', {
+                        status: xhr.status,
+                        statusText: xhr.statusText,
+                        responseText: xhr.responseText,
+                        error: error
+                    });
+                    showErrorMessage('通信エラーが発生しました。（' + xhr.status + '）');
                     task.done(!newDone);
+                },
+                complete: function() {
+                    self.isProcessing(false);
+                    checkbox.classList.remove('task-check-animation');
                 }
             });
 
             // イベントの伝播を止める（チェックボックスのデフォルト動作を防ぐ）
-            return true;
+            return false;
         };
     }
 
-    // ViewModelをHTMLにバインド
-    ko.applyBindings(new BattleViewModel(), document.getElementById('boss-view'));
-    ko.applyBindings(new BattleViewModel(), document.querySelector('.task-list'));
+    // ViewModelインスタンスを作成（グローバル参照用）
+    var viewModel = new BattleViewModel();
 
-    // 勝利メッセージ表示
-    function showVictoryMessage(xp) {
-        var alert = document.getElementById('level-up-alert');
-        alert.innerHTML = '<strong>Victory!</strong> ボスを討伐しました！ +' + xp + ' XP獲得！';
-        alert.classList.remove('d-none', 'alert-success');
-        alert.classList.add('alert-warning');
+    // ViewModelをHTMLにバインド
+    var bossView = document.getElementById('boss-view');
+    var taskListContainer = document.getElementById('task-list-container');
+
+    if (bossView) {
+        ko.applyBindings(viewModel, bossView);
+    }
+    if (taskListContainer) {
+        ko.applyBindings(viewModel, taskListContainer);
+    }
+
+    // ダメージエフェクト表示
+    function showDamageEffect(damage, event) {
+        var damageEl = document.createElement('div');
+        damageEl.className = 'damage-effect';
+        damageEl.textContent = '-' + damage;
+
+        // クリック位置の近くに表示
+        var rect = event.target.getBoundingClientRect();
+        damageEl.style.left = (rect.left + rect.width / 2) + 'px';
+        damageEl.style.top = (rect.top - 20) + 'px';
+
+        document.body.appendChild(damageEl);
+
+        // アニメーション後に削除
         setTimeout(function() {
-            alert.classList.add('d-none');
-        }, 5000);
+            damageEl.remove();
+        }, 1000);
+    }
+
+    // HPバーフラッシュ
+    function flashHpBar() {
+        var hpBar = document.querySelector('.boss-hp-bar');
+        if (hpBar) {
+            hpBar.classList.add('hp-damage-flash');
+            setTimeout(function() {
+                hpBar.classList.remove('hp-damage-flash');
+            }, 300);
+        }
+    }
+
+    // 勝利オーバーレイ表示
+    function showVictoryOverlay(xp) {
+        var overlay = document.createElement('div');
+        overlay.className = 'victory-overlay';
+        overlay.innerHTML = '<h1>VICTORY!</h1>' +
+            '<p style="color: #f3f4f6; font-size: 1.5rem; margin-top: 1rem;">ボスを討伐しました！</p>' +
+            '<p style="color: #fbbf24; font-size: 2rem; margin-top: 0.5rem;">+' + xp + ' XP</p>' +
+            '<button class="btn btn-warning btn-lg mt-4" onclick="this.parentElement.remove()">続ける</button>';
+
+        document.body.appendChild(overlay);
+
+        // カード全体にエフェクト
+        var bossCard = document.getElementById('boss-view');
+        if (bossCard) {
+            bossCard.classList.add('boss-defeated-effect');
+        }
     }
 
     // レベルアップメッセージ表示
     function showLevelUpMessage(newLevel) {
         var alert = document.getElementById('level-up-alert');
-        alert.innerHTML = '<strong>Level Up!</strong> レベルが ' + newLevel + ' になりました！';
-        alert.classList.remove('d-none');
+        alert.innerHTML = '<strong>LEVEL UP!</strong> レベルが <span class="fs-4">' + newLevel + '</span> になりました！';
+        alert.classList.remove('d-none', 'alert-warning');
+        alert.classList.add('alert-success');
+
         setTimeout(function() {
             alert.classList.add('d-none');
         }, 5000);
+
+        // ナビバーのレベル表示を更新
+        updateUserStatus();
+    }
+
+    // エラーメッセージ表示
+    function showErrorMessage(message) {
+        var alert = document.getElementById('level-up-alert');
+        alert.innerHTML = '<strong>Error:</strong> ' + message;
+        alert.classList.remove('d-none', 'alert-success', 'alert-warning');
+        alert.classList.add('alert-danger');
+
+        setTimeout(function() {
+            alert.classList.add('d-none');
+        }, 3000);
+    }
+
+    // 成功メッセージ表示
+    function showSuccessMessage(message) {
+        var alert = document.getElementById('level-up-alert');
+        alert.innerHTML = '<strong>Success:</strong> ' + message;
+        alert.classList.remove('d-none', 'alert-danger', 'alert-warning');
+        alert.classList.add('alert-success');
+
+        setTimeout(function() {
+            alert.classList.add('d-none');
+        }, 3000);
+    }
+
+    // タスク追加フォームのイベントハンドラー
+    document.getElementById('addTaskForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        var title = document.getElementById('task_title').value.trim();
+        var weight = parseInt(document.getElementById('task_weight').value) || 10;
+
+        if (!title) {
+            document.getElementById('addTaskError').textContent = 'タスク名を入力してください。';
+            document.getElementById('addTaskError').classList.remove('d-none');
+            return;
+        }
+
+        // エラー表示をリセット
+        document.getElementById('addTaskError').classList.add('d-none');
+
+        // ボタンを無効化してスピナー表示
+        document.getElementById('addTaskSubmit').disabled = true;
+        document.querySelector('#addTaskSubmit .spinner-border').classList.remove('d-none');
+
+        // ViewModelのaddTaskを呼び出し
+        viewModel.addTask(title, weight);
+    });
+
+    // モーダルが閉じられたらエラー表示をリセット
+    document.getElementById('addTaskModal').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('addTaskError').classList.add('d-none');
+        document.getElementById('addTaskForm').reset();
+        document.getElementById('task_weight').value = '10';
+    });
+
+    // ナビバーのユーザーステータスを更新
+    function updateUserStatus() {
+        $.ajax({
+            url: '<?php echo \Uri::base(); ?>api/battle/user_status',
+            type: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    // レベル表示を更新
+                    var levelEl = document.querySelector('.user-level');
+                    if (levelEl) {
+                        levelEl.textContent = 'Lv.' + response.level;
+                    }
+
+                    // XPバーを更新
+                    var xpBar = document.querySelector('.xp-bar');
+                    if (xpBar) {
+                        xpBar.style.width = response.xp_progress + '%';
+                    }
+
+                    // XPテキストを更新
+                    var xpText = document.querySelector('.xp-text');
+                    if (xpText) {
+                        xpText.textContent = 'XP: ' + response.xp + ' / ' + response.next_level_xp;
+                    }
+                }
+            }
+        });
     }
 });
 </script>
